@@ -233,6 +233,19 @@ ufo_net_camera_initable_init (GInitable *initable,
 }
 
 static void
+uca_net_camera_constructed (GObject *object)
+{
+    UcaNetCameraPrivate *priv;
+
+    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+
+    if (priv->host == NULL)
+        priv->host = g_strdup ("localhost");
+
+    priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, 8989, NULL, &priv->construct_error);
+}
+
+static void
 uca_net_camera_initable_iface_init (GInitableIface *iface)
 {
     iface->init = ufo_net_camera_initable_init;
@@ -246,6 +259,7 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
 
     oclass->set_property = uca_net_camera_set_property;
     oclass->get_property = uca_net_camera_get_property;
+    oclass->constructed = uca_net_camera_constructed;
     oclass->dispose = uca_net_camera_dispose;
     oclass->finalize = uca_net_camera_finalize;
 
@@ -282,11 +296,6 @@ uca_net_camera_init (UcaNetCamera *self)
 
     priv->construct_error = NULL;
     priv->client = g_socket_client_new ();
-
-    if (priv->host == NULL)
-        priv->host = g_strdup ("localhost");
-
-    priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, 8989, NULL, &priv->construct_error);
 }
 
 G_MODULE_EXPORT GType
