@@ -51,25 +51,45 @@ uca_net_server_handle_set_property (GOutputStream *output, UcaNetMessageSetPrope
 }
 
 static void
-uca_net_server_handle_start_recording (GOutputStream *output, GError **stream_error)
+handle_default (GOutputStream *output, UcaNetMessageType type, 
+                void (*handler) (gpointer user_data, GError **error), GError **stream_error)
 {
-    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_START_RECORDING };
+    UcaNetDefaultReply reply = { .type = type };
     GError *error = NULL;
 
-    handlers.start_recording (handlers.user_data, &error);
+    handler (handlers.user_data, &error);
     prepare_error_reply (error, &reply.error);
     send_reply (output, &reply, sizeof (reply), stream_error);
 }
 
 static void
+uca_net_server_handle_start_recording (GOutputStream *output, GError **stream_error)
+{
+    handle_default (output, UCA_NET_MESSAGE_START_RECORDING, handlers.start_recording, stream_error);
+}
+
+static void
 uca_net_server_handle_stop_recording (GOutputStream *output, GError **stream_error)
 {
-    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_STOP_RECORDING };
-    GError *error = NULL;
+    handle_default (output, UCA_NET_MESSAGE_STOP_RECORDING, handlers.start_recording, stream_error);
+}
 
-    handlers.stop_recording (handlers.user_data, &error);
-    prepare_error_reply (error, &reply.error);
-    send_reply (output, &reply, sizeof (reply), stream_error);
+static void
+uca_net_server_handle_start_readout (GOutputStream *output, GError **stream_error)
+{
+    handle_default (output, UCA_NET_MESSAGE_START_READOUT, handlers.start_readout, stream_error);
+}
+
+static void
+uca_net_server_handle_stop_readout (GOutputStream *output, GError **stream_error)
+{
+    handle_default (output, UCA_NET_MESSAGE_STOP_READOUT, handlers.stop_readout, stream_error);
+}
+
+static void
+uca_net_server_handle_trigger (GOutputStream *output, GError **stream_error)
+{
+    handle_default (output, UCA_NET_MESSAGE_TRIGGER, handlers.trigger, stream_error);
 }
 
 static void
@@ -152,6 +172,15 @@ uca_net_server_handle (GSocketConnection *connection)
                 break;
             case UCA_NET_MESSAGE_STOP_RECORDING:
                 uca_net_server_handle_stop_recording (output, &error);
+                break;
+            case UCA_NET_MESSAGE_START_READOUT:
+                uca_net_server_handle_start_readout (output, &error);
+                break;
+            case UCA_NET_MESSAGE_STOP_READOUT:
+                uca_net_server_handle_stop_readout (output, &error);
+                break;
+            case UCA_NET_MESSAGE_TRIGGER:
+                uca_net_server_handle_trigger (output, &error);
                 break;
             case UCA_NET_MESSAGE_GRAB:
                 uca_net_server_handle_grab (output, (UcaNetMessageGrabRequest *) buffer, &error);

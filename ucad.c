@@ -74,6 +74,9 @@ handle_get_property_request (gpointer user_data, const gchar *name, gchar *value
     camera = user_data;
     pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), name);
 
+    if (pspec == NULL)
+        return;
+
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
     g_object_get_property (G_OBJECT (camera), name, &prop_value);
 
@@ -114,6 +117,24 @@ handle_stop_recording_request (gpointer user_data, GError **error)
     uca_camera_stop_recording (UCA_CAMERA (user_data), error);
 }
 
+static void
+handle_start_readout_request (gpointer user_data, GError **error)
+{
+    uca_camera_start_recording (UCA_CAMERA (user_data), error);
+}
+
+static void
+handle_stop_readout_request (gpointer user_data, GError **error)
+{
+    uca_camera_stop_recording (UCA_CAMERA (user_data), error);
+}
+
+static void
+handle_trigger_request (gpointer user_data, GError **error)
+{
+    uca_camera_trigger (UCA_CAMERA (user_data), error);
+}
+
 static gboolean
 handle_grab_request (gpointer data, gpointer user_data, GError **error)
 {
@@ -133,6 +154,9 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         .set_property = handle_set_property_request,
         .start_recording = handle_start_recording_request,
         .stop_recording = handle_stop_recording_request,
+        .start_readout = handle_start_readout_request,
+        .stop_readout = handle_stop_readout_request,
+        .trigger = handle_trigger_request,
         .grab = handle_grab_request,
     };
 

@@ -134,22 +134,37 @@ uca_net_client_set_property (GSocketConnection *connection, const gchar *name, c
     return handle_default_reply (connection, UCA_NET_MESSAGE_SET_PROPERTY, error);
 }
 
+static void
+default_handshake (GSocketConnection *connection, UcaNetMessageType type, GError **error)
+{
+    if (!send_default_message (connection, type, error))
+        return;
+
+    handle_default_reply (connection, type, error);
+}
+
 void
 uca_net_client_start_recording (GSocketConnection *connection, GError **error)
 {
-    if (!send_default_message (connection, UCA_NET_MESSAGE_START_RECORDING, error))
-        return;
-
-    handle_default_reply (connection, UCA_NET_MESSAGE_START_RECORDING, error);
+    default_handshake (connection, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
 void
 uca_net_client_stop_recording (GSocketConnection *connection, GError **error)
 {
-    if (!send_default_message (connection, UCA_NET_MESSAGE_STOP_RECORDING, error))
-        return;
+    default_handshake (connection, UCA_NET_MESSAGE_STOP_RECORDING, error);
+}
 
-    handle_default_reply (connection, UCA_NET_MESSAGE_STOP_RECORDING, error);
+void
+uca_net_client_start_readout (GSocketConnection *connection, GError **error)
+{
+    default_handshake (connection, UCA_NET_MESSAGE_START_READOUT, error);
+}
+
+void
+uca_net_client_stop_readout (GSocketConnection *connection, GError **error)
+{
+    default_handshake (connection, UCA_NET_MESSAGE_STOP_READOUT, error);
 }
 
 gboolean

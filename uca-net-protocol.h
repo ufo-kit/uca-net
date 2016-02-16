@@ -8,6 +8,9 @@ typedef enum {
     UCA_NET_MESSAGE_SET_PROPERTY,
     UCA_NET_MESSAGE_START_RECORDING,
     UCA_NET_MESSAGE_STOP_RECORDING,
+    UCA_NET_MESSAGE_START_READOUT,
+    UCA_NET_MESSAGE_STOP_READOUT,
+    UCA_NET_MESSAGE_TRIGGER,
     UCA_NET_MESSAGE_GRAB,
     UCA_NET_MESSAGE_CLOSE_CONNECTION,
 } UcaNetMessageType;
@@ -57,6 +60,9 @@ typedef struct {
     void     (*set_property)    (gpointer user_data, const gchar *name, const gchar *value, GError **error);
     void     (*start_recording) (gpointer user_data, GError **error);
     void     (*stop_recording)  (gpointer user_data, GError **error);
+    void     (*start_readout)   (gpointer user_data, GError **error);
+    void     (*stop_readout)    (gpointer user_data, GError **error);
+    void     (*trigger)         (gpointer user_data, GError **error);
     gboolean (*grab)            (gpointer data, gpointer user_data, GError **error);
 } UcaNetHandlers;
 
@@ -71,6 +77,10 @@ gboolean    uca_net_client_set_property    (GSocketConnection   *connection,
 void        uca_net_client_start_recording (GSocketConnection   *connection,
                                             GError             **error);
 void        uca_net_client_stop_recording  (GSocketConnection   *connection,
+                                            GError             **error);
+void        uca_net_client_start_readout   (GSocketConnection   *connection,
+                                            GError             **error);
+void        uca_net_client_stop_readout    (GSocketConnection   *connection,
                                             GError             **error);
 gboolean    uca_net_client_grab            (GSocketConnection   *connection,
                                             gpointer             data,
