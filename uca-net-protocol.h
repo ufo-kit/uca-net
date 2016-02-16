@@ -54,19 +54,6 @@ typedef struct {
 } UcaNetMessageGrabRequest;
 
 
-typedef struct {
-    gpointer user_data;
-
-    void     (*get_property)    (gpointer user_data, const gchar *name, gchar *value);
-    void     (*set_property)    (gpointer user_data, const gchar *name, const gchar *value, GError **error);
-    void     (*start_recording) (gpointer user_data, GError **error);
-    void     (*stop_recording)  (gpointer user_data, GError **error);
-    void     (*start_readout)   (gpointer user_data, GError **error);
-    void     (*stop_readout)    (gpointer user_data, GError **error);
-    void     (*trigger)         (gpointer user_data, GError **error);
-    gboolean (*grab)            (gpointer data, gpointer user_data, GError **error);
-} UcaNetHandlers;
-
 gboolean    uca_net_client_get_property    (GSocketConnection   *connection,
                                             const gchar         *name,
                                             GValue              *value,
@@ -89,8 +76,5 @@ gboolean    uca_net_client_grab            (GSocketConnection   *connection,
                                             GError             **error);
 gboolean    uca_net_client_close           (GSocketConnection  *connection,
                                             GError             **error);
-
-void        uca_net_server_register_handlers (UcaNetHandlers    *handlers);
-void        uca_net_server_handle           (GSocketConnection  *connection);
 
 #endif
