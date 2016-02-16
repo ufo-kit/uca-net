@@ -20,3 +20,14 @@ and connect to it from any other machine, e.g.
 
     $ uca-grab -n 10 net            # grab ten frames
     $ uca-camera-control -c net     # control graphically
+
+or from [Concert](https://github.com/ufo-kit/concert)
+
+```python
+from concert.devices.cameras.uca import Camera
+
+camera = Camera('net', {'host': 'foo.bar:1234'})
+
+with camera.recording():
+    print(camera.grab())
+```
