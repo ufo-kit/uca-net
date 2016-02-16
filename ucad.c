@@ -22,6 +22,17 @@
 #include <uca/uca-plugin-manager.h>
 #include "uca-net-protocol.h"
 
+
+typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
+typedef void (*CameraFunc) (UcaCamera *camera, GError **error);
+
+
+typedef struct {
+    UcaNetMessageType type;
+    MessageHandler handler;
+} HandlerTable;
+
+
 static gchar *
 get_camera_list (UcaPluginManager *manager)
 {
@@ -64,81 +75,219 @@ uca_option_context_new (UcaPluginManager *manager)
 }
 
 static void
-handle_get_property_request (gpointer user_data, const gchar *name, gchar *value)
+send_reply (GSocketConnection *connection, gpointer data, gsize size, GError **error)
 {
-    UcaCamera *camera;
+    GOutputStream *output;
+
+    output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
+
+    if (!g_output_stream_write_all (output, data, size, NULL, NULL, error))
+        return;
+
+    if (!g_output_stream_flush (output, NULL, error))
+        return;
+}
+
+static void
+prepare_error_reply (GError *error, UcaNetErrorReply *reply)
+{
+    if (error != NULL) {
+        reply->occurred = TRUE;
+        reply->code = error->code;
+        strncpy (reply->domain, g_quark_to_string (error->domain), sizeof (error->domain));
+        strncpy (reply->message, error->message, sizeof (reply->message));
+        g_error_free (error);
+    }
+    else {
+        reply->occurred = FALSE;
+    }
+}
+
+static void
+handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
+{
+    UcaNetMessageGetPropertyRequest *request;
+    UcaNetMessageGetPropertyReply reply;
     GParamSpec *pspec;
     GValue prop_value = {0};
     GValue str_value = {0};
 
-    camera = user_data;
-    pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), name);
+    request = (UcaNetMessageGetPropertyRequest *) message;
+    pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     if (pspec == NULL)
         return;
 
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
-    g_object_get_property (G_OBJECT (camera), name, &prop_value);
+    g_object_get_property (G_OBJECT (camera), request->property_name, &prop_value);
 
     g_value_init (&str_value, G_TYPE_STRING);
     g_value_transform (&prop_value, &str_value);
 
-    strncpy (value, g_value_get_string (&str_value), sizeof (g_value_get_string (&str_value)));
+    reply.type = request->type;
+    strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
+    send_reply (connection, &reply, sizeof (reply), error);
 }
 
 static void
-handle_set_property_request (gpointer user_data, const gchar *name, const gchar *value, GError **error)
+handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error) 
 {
-    UcaCamera *camera;
+    UcaNetMessageSetPropertyRequest *request;
+    UcaNetDefaultReply reply;
     GParamSpec *pspec;
     GValue prop_value = {0};
     GValue str_value = {0};
 
-    camera = user_data;
-    pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), name);
+    request = (UcaNetMessageSetPropertyRequest *) message;
+    pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
     g_value_init (&str_value, G_TYPE_STRING);
-    g_value_set_string (&str_value, value);
+    g_value_set_string (&str_value, request->property_value);
     g_value_transform (&str_value, &prop_value);
 
-    g_object_set_property (G_OBJECT (camera), name, &prop_value);
+    g_object_set_property (G_OBJECT (camera), request->property_name, &prop_value);
+    send_reply (connection, &reply, sizeof (reply), error);
 }
 
 static void
-handle_start_recording_request (gpointer user_data, GError **error)
+handle_simple_request (GSocketConnection *connection, UcaCamera *camera,
+                       UcaNetMessageDefault *message, CameraFunc func, GError **stream_error)
 {
-    uca_camera_start_recording (UCA_CAMERA (user_data), error);
+    UcaNetDefaultReply reply = { .type = message->type };
+    GError *error = NULL;
+
+    func (camera, &error);
+
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
 }
 
 static void
-handle_stop_recording_request (gpointer user_data, GError **error)
+handle_start_recording_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    uca_camera_stop_recording (UCA_CAMERA (user_data), error);
+    handle_simple_request (connection, camera, message, uca_camera_start_recording, error);
 }
 
 static void
-handle_start_readout_request (gpointer user_data, GError **error)
+handle_stop_recording_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    uca_camera_start_recording (UCA_CAMERA (user_data), error);
+    handle_simple_request (connection, camera, message, uca_camera_stop_recording, error);
 }
 
 static void
-handle_stop_readout_request (gpointer user_data, GError **error)
+handle_start_readout_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    uca_camera_stop_recording (UCA_CAMERA (user_data), error);
+    handle_simple_request (connection, camera, message, uca_camera_start_recording, error);
 }
 
 static void
-handle_trigger_request (gpointer user_data, GError **error)
+handle_stop_readout_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    uca_camera_trigger (UCA_CAMERA (user_data), error);
+    handle_simple_request (connection, camera, message, uca_camera_stop_recording, error);
 }
 
-static gboolean
-handle_grab_request (gpointer data, gpointer user_data, GError **error)
+static void
+handle_trigger_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    return uca_camera_grab (UCA_CAMERA (user_data), data, error);
+    handle_simple_request (connection, camera, message, uca_camera_trigger, error);
+}
+
+static void
+handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    GOutputStream *output;
+    UcaNetMessageGrabRequest *request;
+    gsize bytes_left;
+    GError *error = NULL;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_GRAB };
+    static gsize size = 0;
+    static gchar *buffer = NULL;
+
+    request = (UcaNetMessageGrabRequest *) message;
+    output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
+
+    if (buffer == NULL || size != request->size) {
+        buffer = g_realloc (buffer, request->size);
+        size = request->size;
+    }
+
+    uca_camera_grab (camera, buffer, &error);
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+
+    /* send data if no error occured during grab */
+    if (!reply.error.occurred) {
+        bytes_left = size;
+
+        while (bytes_left > 0) {
+            gssize written;
+
+            written = g_output_stream_write (output, &buffer[size - bytes_left], bytes_left, NULL, stream_error);
+
+            if (written < 0)
+                return;
+
+            bytes_left -= written;
+        }
+    }
+}
+
+static void
+serve_connection (GSocketConnection *connection, UcaCamera *camera)
+{
+    GInputStream *input;
+    gchar *buffer;
+    gboolean active;
+
+    HandlerTable table[] = {
+        { UCA_NET_MESSAGE_GET_PROPERTY,     handle_get_property_request },
+        { UCA_NET_MESSAGE_SET_PROPERTY,     handle_set_property_request },
+        { UCA_NET_MESSAGE_START_RECORDING,  handle_start_recording_request },
+        { UCA_NET_MESSAGE_STOP_RECORDING,   handle_stop_recording_request },
+        { UCA_NET_MESSAGE_START_READOUT,    handle_start_readout_request },
+        { UCA_NET_MESSAGE_STOP_READOUT,     handle_stop_readout_request },
+        { UCA_NET_MESSAGE_TRIGGER,          handle_trigger_request },
+        { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
+        { UCA_NET_MESSAGE_INVALID,          NULL }
+    };
+
+    buffer = g_malloc0 (4096);
+    input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
+    active = TRUE;
+
+    while (active) {
+        UcaNetMessageDefault *message;
+        GError *error = NULL;
+
+        /* looks dangerous */
+        g_input_stream_read (input, buffer, 4096, NULL, &error);
+        message = (UcaNetMessageDefault *) buffer;
+
+        if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_BROKEN_PIPE)) {
+            g_error_free (error);
+            active = FALSE;
+            break;
+        }
+
+        if (message->type == UCA_NET_MESSAGE_CLOSE_CONNECTION) {
+            active = FALSE;
+            break;
+        }
+
+        for (guint i = 0; table[i].type != UCA_NET_MESSAGE_INVALID; i++) {
+            if (table[i].type == message->type)
+                table[i].handler (connection, camera, buffer, &error);
+        }
+
+        if (error != NULL) {
+            g_warning ("Error handling requests: %s", error->message);
+            g_error_free (error);
+            active = FALSE;
+        }
+    }
+
+    g_free (buffer);
 }
 
 static gboolean
@@ -148,18 +297,6 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
     GInetAddress *address;
     gchar *address_string;
 
-    UcaNetHandlers handlers = {
-        .user_data = user_data,
-        .get_property = handle_get_property_request,
-        .set_property = handle_set_property_request,
-        .start_recording = handle_start_recording_request,
-        .stop_recording = handle_stop_recording_request,
-        .start_readout = handle_start_readout_request,
-        .stop_readout = handle_stop_readout_request,
-        .trigger = handle_trigger_request,
-        .grab = handle_grab_request,
-    };
-
     sock_address = G_INET_SOCKET_ADDRESS (g_socket_connection_get_remote_address (connection, NULL));
     address = g_inet_socket_address_get_address (sock_address);
     address_string = g_inet_address_to_string (address);
@@ -168,8 +305,7 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
     g_free (address_string);
     g_object_unref (sock_address);
 
-    uca_net_server_register_handlers (&handlers);
-    uca_net_server_handle (connection);
+    serve_connection (connection, UCA_CAMERA (user_data));
     
     return FALSE;
 }

@@ -27,7 +27,7 @@ install(TARGETS ucanet LIBRARY DESTINATION ${LIBUCA_PLUGINDIR})
 
 # uca-net server
 configure_paths(UCAD)
-add_executable(ucad ucad.c uca-net-server.c)
+add_executable(ucad ucad.c)
 
 target_link_libraries(ucad ${UCA_LIBRARIES} ${GIO_LIBRARIES})
 
