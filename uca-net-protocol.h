@@ -53,28 +53,4 @@ typedef struct {
     gsize size;
 } UcaNetMessageGrabRequest;
 
-
-gboolean    uca_net_client_get_property    (GSocketConnection   *connection,
-                                            const gchar         *name,
-                                            GValue              *value,
-                                            GError             **error);
-gboolean    uca_net_client_set_property    (GSocketConnection   *connection,
-                                            const gchar         *name,
-                                            const GValue        *value,
-                                            GError             **error);
-void        uca_net_client_start_recording (GSocketConnection   *connection,
-                                            GError             **error);
-void        uca_net_client_stop_recording  (GSocketConnection   *connection,
-                                            GError             **error);
-void        uca_net_client_start_readout   (GSocketConnection   *connection,
-                                            GError             **error);
-void        uca_net_client_stop_readout    (GSocketConnection   *connection,
-                                            GError             **error);
-gboolean    uca_net_client_grab            (GSocketConnection   *connection,
-                                            gpointer             data,
-                                            gsize                size,
-                                            GError             **error);
-gboolean    uca_net_client_close           (GSocketConnection  *connection,
-                                            GError             **error);
-
 #endif

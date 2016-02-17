@@ -398,8 +398,8 @@ uca_net_camera_finalize (GObject *object)
 
 static gboolean
 ufo_net_camera_initable_init (GInitable *initable,
-                               GCancellable *cancellable,
-                               GError **error)
+                              GCancellable *cancellable,
+                              GError **error)
 {
     UcaNetCamera *camera;
     UcaNetCameraPrivate *priv;
