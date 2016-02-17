@@ -235,6 +235,42 @@ handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 }
 
 static void
+handle_write_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    GInputStream *input;
+    UcaNetMessageWriteRequest *request;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_WRITE };
+    gchar *buffer;
+    gsize bytes_left;
+    GError *error = NULL;
+
+    input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
+    request = (UcaNetMessageWriteRequest *) message;
+    buffer = g_malloc0 (request->size);
+    bytes_left = request->size;
+
+    while (bytes_left > 0) {
+        gssize read;
+        gchar *buffer;
+
+        read = g_input_stream_read (input, &buffer[request->size - bytes_left], bytes_left, NULL, stream_error);
+
+        if (read < 0)
+            goto handle_write_request_cleanup;
+
+        bytes_left -= read;
+    }
+
+    uca_camera_write (camera, request->name, buffer, request->size, &error);
+
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+
+handle_write_request_cleanup:
+    g_free (buffer);
+}
+
+static void
 serve_connection (GSocketConnection *connection, UcaCamera *camera)
 {
     GInputStream *input;
@@ -250,6 +286,7 @@ serve_connection (GSocketConnection *connection, UcaCamera *camera)
         { UCA_NET_MESSAGE_STOP_READOUT,     handle_stop_readout_request },
         { UCA_NET_MESSAGE_TRIGGER,          handle_trigger_request },
         { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
+        { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
 

@@ -13,6 +13,7 @@ typedef enum {
     UCA_NET_MESSAGE_STOP_READOUT,
     UCA_NET_MESSAGE_TRIGGER,
     UCA_NET_MESSAGE_GRAB,
+    UCA_NET_MESSAGE_WRITE,
     UCA_NET_MESSAGE_CLOSE_CONNECTION,
 } UcaNetMessageType;
 
@@ -52,5 +53,11 @@ typedef struct {
     UcaNetMessageType type;
     gsize size;
 } UcaNetMessageGrabRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gsize size;
+    gchar name[128];
+} UcaNetMessageWriteRequest;
 
 #endif

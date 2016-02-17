@@ -157,7 +157,37 @@ uca_net_camera_write (UcaCamera *camera,
                       gsize size,
                       GError **error)
 {
+    UcaNetCameraPrivate *priv;
+    GOutputStream *output;
+    gssize bytes_left;
+    gchar *buffer;
+    UcaNetMessageWriteRequest request = { .type = UCA_NET_MESSAGE_WRITE };
+
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    output = g_io_stream_get_output_stream (G_IO_STREAM (priv->connection));
+    request.size = size;
+    strncpy (request.name, name, sizeof (request.name));
+
+    if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, error))
+        return;
+
+    bytes_left = size;
+    buffer = (gchar *)  data;
+
+    while (bytes_left > 0) {
+        gssize written;
+
+        written = g_output_stream_write (output, &buffer[size - bytes_left], bytes_left, NULL, error);
+
+        if (written < 0)
+            return;
+
+        bytes_left -= written;
+    }
+
+    handle_default_reply (priv->connection, UCA_NET_MESSAGE_WRITE, error);
 }
 
 static gboolean
