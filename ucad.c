@@ -251,7 +251,6 @@ handle_write_request (GSocketConnection *connection, UcaCamera *camera, gpointer
 
     while (bytes_left > 0) {
         gssize read;
-        gchar *buffer;
 
         read = g_input_stream_read (input, &buffer[request->size - bytes_left], bytes_left, NULL, stream_error);
 
