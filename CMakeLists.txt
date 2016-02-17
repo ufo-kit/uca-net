@@ -23,8 +23,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${UC
 link_directories(${UCA_LIBRARY_DIRS} ${GIO_LIBRARY_DIRS})
 
 # uca-net client camera
-add_library(ucanet SHARED uca-net-camera.c uca-net-client.c)
-target_link_libraries(ucanet ${UCA_LIBRARIES} ${MSGPACK_LIBRARIES})
+add_library(ucanet SHARED uca-net-camera.c)
+target_link_libraries(ucanet ${UCA_LIBRARIES})
 
 install(TARGETS ucanet LIBRARY DESTINATION ${LIBUCA_PLUGINDIR})
 
