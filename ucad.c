@@ -21,6 +21,7 @@
 #include <uca/uca-camera.h>
 #include <uca/uca-plugin-manager.h>
 #include "uca-net-protocol.h"
+#include "config.h"
 
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
@@ -311,14 +312,14 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
 }
 
 static void
-serve (UcaCamera *camera, GError **error)
+serve (UcaCamera *camera, guint16 port, GError **error)
 {
     GMainLoop *loop;
     GSocketService *service;
 
     service = g_threaded_socket_service_new (1);
 
-    if (!g_socket_listener_add_inet_port (G_SOCKET_LISTENER (service), 8989, NULL, error))
+    if (!g_socket_listener_add_inet_port (G_SOCKET_LISTENER (service), port, NULL, error))
         return;
 
     g_signal_connect (service, "run", G_CALLBACK (run_callback), camera);
@@ -334,8 +335,12 @@ main (int argc, char **argv)
     UcaPluginManager *manager;
     UcaCamera *camera;
     GError *error = NULL;
+    static guint16 port = UCA_NET_DEFAULT_PORT;
 
-    static GOptionEntry entries[] = { { NULL } };
+    static GOptionEntry entries[] = {
+        { "port", 'p', 0, G_OPTION_ARG_INT, &port, "Listen port (default: "G_STRINGIFY (UCA_NET_DEFAULT_PORT)")", NULL },
+        { NULL }
+    };
 
 #if !(GLIB_CHECK_VERSION (2, 36, 0))
     g_type_init();
@@ -371,7 +376,7 @@ main (int argc, char **argv)
 
     g_option_context_free (context);
 
-    serve (camera, &error);
+    serve (camera, port, &error);
 
 cleanup_camera:
     g_object_unref (camera);

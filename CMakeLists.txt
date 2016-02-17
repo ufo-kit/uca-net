@@ -16,7 +16,10 @@ pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
 pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
 pkg_check_variable(libuca plugindir)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${UCA_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS} ${MSGPACK_INCLUDE_DIRS})
+set(UCA_NET_DEFAULT_PORT 8989)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${UCA_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS})
 link_directories(${UCA_LIBRARY_DIRS} ${GIO_LIBRARY_DIRS})
 
 # uca-net client camera

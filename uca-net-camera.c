@@ -23,6 +23,7 @@
 #include <uca/uca-camera.h>
 #include "uca-net-camera.h"
 #include "uca-net-protocol.h"
+#include "config.h"
 
 
 #define UCA_NET_CAMERA_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), UCA_TYPE_NET_CAMERA, UcaNetCameraPrivate))
@@ -242,7 +243,7 @@ uca_net_camera_constructed (GObject *object)
     if (priv->host == NULL)
         priv->host = g_strdup ("localhost");
 
-    priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, 8989, NULL, &priv->construct_error);
+    priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, &priv->construct_error);
 }
 
 static void
