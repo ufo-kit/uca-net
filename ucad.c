@@ -134,7 +134,7 @@ static void
 handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error) 
 {
     UcaNetMessageSetPropertyRequest *request;
-    UcaNetDefaultReply reply;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_SET_PROPERTY };
     GParamSpec *pspec;
     GValue prop_value = {0};
     GValue str_value = {0};
