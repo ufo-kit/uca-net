@@ -520,10 +520,12 @@ uca_net_camera_constructed (GObject *object)
 
     priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, &priv->construct_error);
 
-    /* ask for additional camera properties */
-    if (send_default_message (priv->connection, UCA_NET_MESSAGE_GET_PROPERTIES, &priv->construct_error))
-        read_get_properties_reply (object, g_io_stream_get_input_stream (G_IO_STREAM (priv->connection)),
-                                   &priv->construct_error);
+    if (priv->connection != NULL) {
+        /* ask for additional camera properties */
+        if (send_default_message (priv->connection, UCA_NET_MESSAGE_GET_PROPERTIES, &priv->construct_error))
+            read_get_properties_reply (object, g_io_stream_get_input_stream (G_IO_STREAM (priv->connection)),
+                                       &priv->construct_error);
+    }
 }
 
 static void
