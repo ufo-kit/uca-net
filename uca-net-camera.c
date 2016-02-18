@@ -324,7 +324,7 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
         return FALSE;
 
     /* reply */
-    if (g_input_stream_read (input, &reply, sizeof (reply), NULL, error) < 0)
+    if (!g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error))
         return FALSE;
 
     if (reply.type != request.type) {
