@@ -328,7 +328,7 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
         return FALSE;
 
     if (reply.type != request.type) {
-        if (*error != NULL)
+        if (error != NULL)
             /* FIXME: replace with correct error codes */
             *error = g_error_new_literal (G_FILE_ERROR, G_FILE_ERROR_NOENT, "Reply does not match request");
         return FALSE;
