@@ -455,6 +455,59 @@ ufo_net_camera_initable_init (GInitable *initable,
     return TRUE;
 }
 
+static GParamSpec *
+deserialize_param_spec (UcaNetMessageProperty *prop)
+{
+#define CASE_NUMERIC(type, storage) \
+        case type: \
+            return g_param_spec_##storage (prop->name, prop->nick, prop->blurb, \
+                                           prop->spec.g##storage.minimum, prop->spec.g##storage.maximum, \
+                                           prop->spec.g##storage.default_value, \
+                                           prop->flags);
+    switch (prop->value_type) {
+        case G_TYPE_BOOLEAN:
+            return g_param_spec_boolean (prop->name, prop->nick, prop->blurb,
+                                         prop->spec.gboolean.default_value,
+                                         prop->flags);
+        CASE_NUMERIC (G_TYPE_INT, int)
+        CASE_NUMERIC (G_TYPE_UINT, uint)
+        CASE_NUMERIC (G_TYPE_FLOAT, float)
+        CASE_NUMERIC (G_TYPE_DOUBLE, double)
+        default:
+            return NULL;
+    }
+
+#undef CASE_NUMERIC
+}
+
+static void
+read_property_reply (GObject *object, GInputStream *input, guint index, GError **error)
+{
+    UcaNetMessageProperty property;
+
+    if (g_input_stream_read_all (input, &property, sizeof (property), NULL, NULL, error)) {
+        GParamSpec *pspec;
+
+        pspec = deserialize_param_spec (&property);
+
+        if (pspec != NULL)
+            g_object_class_install_property (G_OBJECT_GET_CLASS (object), N_PROPERTIES + index + 1, pspec);
+    }
+}
+
+static void
+read_get_properties_reply (GObject *object, GInputStream *input, GError **error)
+{
+    UcaNetMessageGetPropertiesReply reply;
+
+    if (g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error)) {
+        g_assert (reply.type == UCA_NET_MESSAGE_GET_PROPERTIES);
+
+        for (guint i = 0; i < reply.num_properties; i++)
+            read_property_reply (object, input, i, error);
+    }
+}
+
 static void
 uca_net_camera_constructed (GObject *object)
 {
@@ -466,6 +519,11 @@ uca_net_camera_constructed (GObject *object)
         priv->host = g_strdup ("localhost");
 
     priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, &priv->construct_error);
+
+    /* ask for additional camera properties */
+    if (send_default_message (priv->connection, UCA_NET_MESSAGE_GET_PROPERTIES, &priv->construct_error))
+        read_get_properties_reply (object, g_io_stream_get_input_stream (G_IO_STREAM (priv->connection)),
+                                   &priv->construct_error);
 }
 
 static void

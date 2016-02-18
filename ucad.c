@@ -104,6 +104,66 @@ prepare_error_reply (GError *error, UcaNetErrorReply *reply)
     }
 }
 
+static gboolean
+serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
+{
+    strncpy (prop->name, g_param_spec_get_name (pspec), sizeof (prop->name));
+    strncpy (prop->nick, g_param_spec_get_nick (pspec), sizeof (prop->nick));
+    strncpy (prop->blurb, g_param_spec_get_blurb (pspec), sizeof (prop->blurb));
+
+    prop->value_type = pspec->value_type;
+    prop->flags = pspec->flags;
+
+#define CASE_NUMERIC(type, storage, typeclass) \
+        case type: \
+            prop->spec.storage.minimum = ((typeclass *) pspec)->minimum; \
+            prop->spec.storage.maximum = ((typeclass *) pspec)->maximum; \
+            prop->spec.storage.default_value = ((typeclass *) pspec)->default_value;
+
+    switch (pspec->value_type) {
+        case G_TYPE_BOOLEAN:
+            prop->spec.gboolean.default_value = ((GParamSpecBoolean *) pspec)->default_value;
+            break;
+        CASE_NUMERIC (G_TYPE_INT, gint, GParamSpecInt)
+            break;
+        CASE_NUMERIC (G_TYPE_UINT, guint, GParamSpecUInt)
+            break;
+        CASE_NUMERIC (G_TYPE_FLOAT, gfloat, GParamSpecFloat)
+            break;
+        CASE_NUMERIC (G_TYPE_DOUBLE, gdouble, GParamSpecDouble)
+            break;
+        default:
+            g_warning ("Unsupported property type");
+            return FALSE;
+    }
+
+#undef CASE_NUMERIC
+
+    return TRUE;
+}
+
+static void
+handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
+{
+    UcaNetMessageGetPropertiesReply reply = { .type = UCA_NET_MESSAGE_GET_PROPERTIES };
+    GParamSpec **pspecs;
+    guint num_properties;
+
+    pspecs = g_object_class_list_properties (G_OBJECT_GET_CLASS (camera), &num_properties);
+    reply.num_properties = num_properties - N_BASE_PROPERTIES + 1;
+
+    send_reply (connection, &reply, sizeof (reply), error);
+
+    for (guint i = N_BASE_PROPERTIES - 1; i < num_properties; i++) {
+        UcaNetMessageProperty property;
+
+        if (serialize_param_spec (pspecs[i], &property))
+            send_reply (connection, &property, sizeof (property), error);
+    }
+
+    g_free (pspecs);
+}
+
 static void
 handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
@@ -277,6 +337,7 @@ serve_connection (GSocketConnection *connection, UcaCamera *camera)
     gboolean active;
 
     HandlerTable table[] = {
+        { UCA_NET_MESSAGE_GET_PROPERTIES,   handle_get_properties_request },
         { UCA_NET_MESSAGE_GET_PROPERTY,     handle_get_property_request },
         { UCA_NET_MESSAGE_SET_PROPERTY,     handle_set_property_request },
         { UCA_NET_MESSAGE_START_RECORDING,  handle_start_recording_request },
