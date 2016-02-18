@@ -469,6 +469,10 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
             return g_param_spec_boolean (prop->name, prop->nick, prop->blurb,
                                          prop->spec.gboolean.default_value,
                                          prop->flags);
+        case G_TYPE_STRING:
+            return g_param_spec_string (prop->name, prop->nick, prop->blurb,
+                                        prop->spec.gstring.default_value,
+                                        prop->flags);
         CASE_NUMERIC (G_TYPE_INT, int)
         CASE_NUMERIC (G_TYPE_UINT, uint)
         CASE_NUMERIC (G_TYPE_FLOAT, float)

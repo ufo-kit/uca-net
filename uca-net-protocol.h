@@ -84,6 +84,9 @@ typedef struct {
         struct {
             gboolean default_value;
         } gboolean;
+        struct {
+            gchar default_value[128];
+        } gstring;
         NUMERIC_STRUCT (gint)
         NUMERIC_STRUCT (guint)
         NUMERIC_STRUCT (gfloat)

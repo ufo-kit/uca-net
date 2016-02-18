@@ -124,6 +124,10 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
         case G_TYPE_BOOLEAN:
             prop->spec.gboolean.default_value = ((GParamSpecBoolean *) pspec)->default_value;
             break;
+        case G_TYPE_STRING:
+            strncpy (prop->spec.gstring.default_value, ((GParamSpecString *) pspec)->default_value,
+                     sizeof (prop->spec.gstring.default_value));
+            break;
         CASE_NUMERIC (G_TYPE_INT, gint, GParamSpecInt)
             break;
         CASE_NUMERIC (G_TYPE_UINT, guint, GParamSpecUInt)
