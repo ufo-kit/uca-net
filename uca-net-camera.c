@@ -81,7 +81,7 @@ handle_default_reply (GSocketConnection *connection, UcaNetMessageType type, GEr
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
 
     if (g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error)) {
-        g_assert (reply.type == type);
+        g_warn_if_fail (reply.type == type);
 
         if (reply.error.occurred) {
             g_set_error_literal (error, g_quark_from_string (reply.error.domain), reply.error.code, reply.error.message);
@@ -505,7 +505,7 @@ read_get_properties_reply (GObject *object, GInputStream *input, GError **error)
     UcaNetMessageGetPropertiesReply reply;
 
     if (g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error)) {
-        g_assert (reply.type == UCA_NET_MESSAGE_GET_PROPERTIES);
+        g_warn_if_fail (reply.type == UCA_NET_MESSAGE_GET_PROPERTIES);
 
         for (guint i = 0; i < reply.num_properties; i++)
             read_property_reply (object, input, i, error);
