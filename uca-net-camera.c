@@ -586,7 +586,7 @@ uca_net_camera_init (UcaNetCamera *self)
 }
 
 G_MODULE_EXPORT GType
-uca_camera_get_type (void)
+camera_plugin_get_type (void)
 {
     return UCA_TYPE_NET_CAMERA;
 }
