@@ -18,7 +18,7 @@ Now, you can start a server on a remote machine with
 
 and connect to it from any other machine, e.g.
 
-    $ uca-grab -n 10 net            # grab ten frames
+    $ uca-grab -p host=foo.bar.com:4567 -n 10 net            # grab ten frames
     $ uca-camera-control -c net     # control graphically
 
 or from [Concert](https://github.com/ufo-kit/concert)
