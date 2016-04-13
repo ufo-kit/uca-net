@@ -366,7 +366,11 @@ serve_connection (GSocketConnection *connection, UcaCamera *camera)
         g_input_stream_read (input, buffer, 4096, NULL, &error);
         message = (UcaNetMessageDefault *) buffer;
 
+#if (GLIB_CHECK_VERSION (2, 36, 0))
         if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_BROKEN_PIPE)) {
+#else
+        if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_FAILED)) {
+#endif
             g_error_free (error);
             error = NULL;
             active = FALSE;
