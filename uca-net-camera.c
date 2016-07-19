@@ -519,8 +519,12 @@ uca_net_camera_constructed (GObject *object)
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
 
-    if (priv->host == NULL)
-        priv->host = g_strdup ("localhost");
+    if (priv->host == NULL || !g_strcmp0 (priv->host, "")) {
+        const gchar *env;
+
+        env = g_getenv ("UCA_NET_HOST");
+        priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
+    }
 
     priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, &priv->construct_error);
 
@@ -562,7 +566,7 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
         g_param_spec_string ("host",
                              "Host name and optional port",
                              "Host name and optional port",
-                             "localhost",
+                             "",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 
     for (guint i = PROP_0 + 1; i < N_BASE_PROPERTIES; i++)
@@ -581,6 +585,7 @@ uca_net_camera_init (UcaNetCamera *self)
 
     self->priv = priv = UCA_NET_CAMERA_GET_PRIVATE (self);
 
+    priv->host = NULL;
     priv->construct_error = NULL;
     priv->client = g_socket_client_new ();
 }
