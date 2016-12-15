@@ -9,7 +9,7 @@ include(ConfigurePaths)
 
 find_package(PkgConfig)
 
-add_definitions("-std=c99 -Wall")
+add_definitions("-std=c99 -Wall -fPIC")
 add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
 pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
