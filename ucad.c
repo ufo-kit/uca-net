@@ -333,12 +333,14 @@ handle_write_request_cleanup:
     g_free (buffer);
 }
 
-static void
-serve_connection (GSocketConnection *connection, UcaCamera *camera)
+static gboolean
+run_callback (GSocketService *service, GSocketConnection *connection, GObject *source, gpointer user_data)
 {
     GInputStream *input;
+    UcaCamera *camera;
+    UcaNetMessageDefault *message;
     gchar *buffer;
-    gboolean active;
+    GError *error = NULL;
 
     HandlerTable table[] = {
         { UCA_NET_MESSAGE_GET_PROPERTIES,   handle_get_properties_request },
@@ -354,34 +356,23 @@ serve_connection (GSocketConnection *connection, UcaCamera *camera)
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
 
+    camera = UCA_CAMERA (user_data);
     buffer = g_malloc0 (4096);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
-    active = TRUE;
 
-    while (active) {
-        UcaNetMessageDefault *message;
-        GError *error = NULL;
-
-        /* looks dangerous */
-        g_input_stream_read (input, buffer, 4096, NULL, &error);
-        message = (UcaNetMessageDefault *) buffer;
+    /* looks dangerous */
+    g_input_stream_read (input, buffer, 4096, NULL, &error);
+    message = (UcaNetMessageDefault *) buffer;
 
 #if (GLIB_CHECK_VERSION (2, 36, 0))
-        if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_BROKEN_PIPE)) {
+    if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_BROKEN_PIPE)) {
 #else
-        if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_FAILED)) {
+    if (g_error_matches (error, G_IO_ERROR, G_IO_ERROR_FAILED)) {
 #endif
-            g_error_free (error);
-            error = NULL;
-            active = FALSE;
-            break;
-        }
-
-        if (message->type == UCA_NET_MESSAGE_CLOSE_CONNECTION) {
-            active = FALSE;
-            break;
-        }
-
+        g_error_free (error);
+        error = NULL;
+    }
+    else {
         for (guint i = 0; table[i].type != UCA_NET_MESSAGE_INVALID; i++) {
             if (table[i].type == message->type)
                 table[i].handler (connection, camera, buffer, &error);
@@ -390,30 +381,10 @@ serve_connection (GSocketConnection *connection, UcaCamera *camera)
         if (error != NULL) {
             g_warning ("Error handling requests: %s", error->message);
             g_error_free (error);
-            active = FALSE;
         }
     }
 
     g_free (buffer);
-}
-
-static gboolean
-run_callback (GSocketService *service, GSocketConnection *connection, GObject *source, gpointer user_data)
-{
-    GInetSocketAddress *sock_address;
-    GInetAddress *address;
-    gchar *address_string;
-
-    sock_address = G_INET_SOCKET_ADDRESS (g_socket_connection_get_remote_address (connection, NULL));
-    address = g_inet_socket_address_get_address (sock_address);
-    address_string = g_inet_address_to_string (address);
-    g_message ("Connection accepted from %s:%u", address_string, g_inet_socket_address_get_port (sock_address));
-
-    g_free (address_string);
-    g_object_unref (sock_address);
-
-    serve_connection (connection, UCA_CAMERA (user_data));
-    
     return FALSE;
 }
 
