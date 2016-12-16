@@ -32,10 +32,12 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ${UC
 link_directories(${UCA_LIBRARY_DIRS} ${GIO_LIBRARY_DIRS})
 
 # uca-net client camera
+configure_paths(UCANET)
+set(UCANET_PLUGINDIR "${UCANET_LIBDIR}/uca") # TODO: Maybe move this to ConfigurePaths?
 add_library(ucanet SHARED uca-net-camera.c)
-target_link_libraries(ucanet ${UCA_LIBRARIES})
+target_link_libraries(ucanet ${UCA_LIBRARIES} ${GIO_LIBRARIES})
 
-install(TARGETS ucanet LIBRARY DESTINATION ${LIBUCA_PLUGINDIR})
+install(TARGETS ucanet LIBRARY DESTINATION ${UCANET_PLUGINDIR} RUNTIME DESTINATION ${UCANET_PLUGINDIR})
 
 # uca-net server
 configure_paths(UCAD)
