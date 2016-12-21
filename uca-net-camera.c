@@ -49,10 +49,10 @@ static GParamSpec *net_properties[N_PROPERTIES] = { NULL, };
 struct _UcaNetCameraPrivate {
     GError              *construct_error;
     gchar               *host;
-    GSocketConnection   *connection;
     GSocketClient       *client;
     gsize                size;
 };
+
 
 static gboolean
 send_default_message (GSocketConnection *connection, UcaNetMessageType type, GError **error)
@@ -94,13 +94,23 @@ handle_default_reply (GSocketConnection *connection, UcaNetMessageType type, GEr
     return FALSE;
 }
 
-static void
-request_call (GSocketConnection *connection, UcaNetMessageType type, GError **error)
+static GSocketConnection *
+connect_socket (UcaNetCameraPrivate *priv, GError **error)
 {
-    if (!send_default_message (connection, type, error))
-        return;
+    return g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, error);
+}
 
-    handle_default_reply (connection, type, error);
+static void
+request_call (UcaNetCameraPrivate *priv, UcaNetMessageType type, GError **error)
+{
+    GSocketConnection *connection;
+
+    connection = connect_socket (priv, error);
+
+    if (send_default_message (connection, type, error))
+        handle_default_reply (connection, type, error);
+
+    g_object_unref (connection);
 }
 
 static void
@@ -122,8 +132,7 @@ uca_net_camera_start_recording (UcaCamera *camera,
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
     priv->size = width * height * (bits > 8 ? 2 : 1);
-
-    request_call (priv->connection, UCA_NET_MESSAGE_START_RECORDING, error);
+    request_call (priv, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
 static void
@@ -131,7 +140,7 @@ uca_net_camera_stop_recording (UcaCamera *camera,
                                GError **error)
 {
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera)->connection, UCA_NET_MESSAGE_STOP_RECORDING, error);
+    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera), UCA_NET_MESSAGE_STOP_RECORDING, error);
 }
 
 static void
@@ -139,7 +148,7 @@ uca_net_camera_start_readout (UcaCamera *camera,
                               GError **error)
 {
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera)->connection, UCA_NET_MESSAGE_START_READOUT, error);
+    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera), UCA_NET_MESSAGE_START_READOUT, error);
 }
 
 static void
@@ -147,7 +156,7 @@ uca_net_camera_stop_readout (UcaCamera *camera,
                              GError **error)
 {
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera)->connection, UCA_NET_MESSAGE_STOP_READOUT, error);
+    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera), UCA_NET_MESSAGE_STOP_READOUT, error);
 }
 
 static void
@@ -158,6 +167,7 @@ uca_net_camera_write (UcaCamera *camera,
                       GError **error)
 {
     UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
     GOutputStream *output;
     gssize bytes_left;
     gchar *buffer;
@@ -166,7 +176,8 @@ uca_net_camera_write (UcaCamera *camera,
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
-    output = g_io_stream_get_output_stream (G_IO_STREAM (priv->connection));
+    connection = connect_socket (priv, error);
+    output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     request.size = size;
     strncpy (request.name, name, sizeof (request.name));
 
@@ -187,7 +198,8 @@ uca_net_camera_write (UcaCamera *camera,
         bytes_left -= written;
     }
 
-    handle_default_reply (priv->connection, UCA_NET_MESSAGE_WRITE, error);
+    handle_default_reply (connection, UCA_NET_MESSAGE_WRITE, error);
+    g_object_unref (connection);
 }
 
 static gboolean
@@ -196,6 +208,7 @@ uca_net_camera_grab (UcaCamera *camera,
                      GError **error)
 {
     UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
     GInputStream *input;
     GOutputStream *output;
     gsize bytes_left;
@@ -204,17 +217,19 @@ uca_net_camera_grab (UcaCamera *camera,
     g_return_val_if_fail (UCA_IS_NET_CAMERA (camera), FALSE);
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
 
-    input = g_io_stream_get_input_stream (G_IO_STREAM (priv->connection));
-    output = g_io_stream_get_output_stream (G_IO_STREAM (priv->connection));
+    connection = connect_socket (priv, error);
+    input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
+    output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     request.size = priv->size;
 
     /* request */
     if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, error)) {
+        g_object_unref (connection);
         return FALSE;
     }
 
     /* error reply */
-    if (handle_default_reply (priv->connection, UCA_NET_MESSAGE_GRAB, error)) {
+    if (handle_default_reply (connection, UCA_NET_MESSAGE_GRAB, error)) {
         bytes_left = priv->size;
 
         while (bytes_left > 0) {
@@ -230,9 +245,11 @@ uca_net_camera_grab (UcaCamera *camera,
             bytes_left -= read;
         }
 
+        g_object_unref (connection);
         return TRUE;
     }
 
+    g_object_unref (connection);
     return FALSE;
 }
 
@@ -241,7 +258,7 @@ uca_net_camera_trigger (UcaCamera *camera,
                         GError **error)
 {
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera)->connection, UCA_NET_MESSAGE_TRIGGER, error);
+    request_call (UCA_NET_CAMERA_GET_PRIVATE (camera), UCA_NET_MESSAGE_TRIGGER, error);
 }
 
 static gboolean
@@ -283,6 +300,7 @@ uca_net_camera_set_property (GObject *object,
                              GParamSpec *pspec)
 {
     UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
     const gchar *name;
     GError *error = NULL;
 
@@ -296,10 +314,13 @@ uca_net_camera_set_property (GObject *object,
     }
 
     /* handle remote props */
+    connection = connect_socket (priv, &error);
     name = g_param_spec_get_name (pspec);
 
-    if (!request_set_property (priv->connection, name, value, &error))
+    if (!request_set_property (connection, name, value, &error))
         g_warning ("Could not set property: %s", error->message);
+
+    g_object_unref (connection);
 }
 
 static gboolean
@@ -369,6 +390,7 @@ uca_net_camera_get_property (GObject *object,
                              GParamSpec *pspec)
 {
     UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
     const gchar *name;
     GError *error = NULL;
 
@@ -381,35 +403,19 @@ uca_net_camera_get_property (GObject *object,
     }
 
     /* handle remote props */
+    connection = connect_socket (priv, &error);
     name = g_param_spec_get_name (pspec);
 
-    if (!request_get_property (priv->connection, name, value, &error))
+    if (!request_get_property (connection, name, value, &error))
         g_warning ("Could not get property: %s", error->message);
+
+    g_object_unref (connection);
 }
 
 static void
 uca_net_camera_dispose (GObject *object)
 {
-    UcaNetCameraPrivate *priv;
-
-    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
-
-    if (priv->connection != NULL) {
-        GOutputStream *output;
-        GError *error = NULL;
-        UcaNetMessageDefault request = { .type = UCA_NET_MESSAGE_CLOSE_CONNECTION };
-
-        output = g_io_stream_get_output_stream (G_IO_STREAM (priv->connection));
-
-        if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, &error)) {
-            g_warning ("Could not close connection: %s", error->message);
-            g_error_free (error);
-        }
-
-        g_object_unref (priv->connection);
-    }
-
-    g_object_unref (priv->client);
+    g_object_unref (UCA_NET_CAMERA_GET_PRIVATE (object)->client);
     G_OBJECT_CLASS (uca_net_camera_parent_class)->dispose (object);
 }
 
@@ -516,6 +522,7 @@ static void
 uca_net_camera_constructed (GObject *object)
 {
     UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
 
@@ -526,13 +533,14 @@ uca_net_camera_constructed (GObject *object)
         priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
     }
 
-    priv->connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, &priv->construct_error);
+    connection = connect_socket (priv, &priv->construct_error);
 
-    if (priv->connection != NULL) {
+    if (connection != NULL) {
         /* ask for additional camera properties */
-        if (send_default_message (priv->connection, UCA_NET_MESSAGE_GET_PROPERTIES, &priv->construct_error))
-            read_get_properties_reply (object, g_io_stream_get_input_stream (G_IO_STREAM (priv->connection)),
-                                       &priv->construct_error);
+        if (send_default_message (connection, UCA_NET_MESSAGE_GET_PROPERTIES, &priv->construct_error))
+            read_get_properties_reply (object, g_io_stream_get_input_stream (G_IO_STREAM (connection)), &priv->construct_error);
+
+        g_object_unref (connection);
     }
 }
 
