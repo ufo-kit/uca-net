@@ -370,7 +370,7 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
                 g_value_set_double (value, atof (reply.property_value));
                 break;
             case G_TYPE_BOOLEAN:
-                g_value_set_boolean (value, g_strcmp0 (reply.property_value, "TRUE"));
+                g_value_set_boolean (value, g_strcmp0 (reply.property_value, "TRUE") == 0);
                 break;
             case G_TYPE_STRING:
                 g_value_set_string (value, reply.property_value);
