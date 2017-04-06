@@ -211,6 +211,7 @@ handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, g
     g_value_set_string (&str_value, request->property_value);
     g_value_transform (&str_value, &prop_value);
 
+    g_debug ("Setting `%s' to `%s'", request->property_name, request->property_value);
     g_object_set_property (G_OBJECT (camera), request->property_name, &prop_value);
     send_reply (connection, &reply, sizeof (reply), error);
 }
