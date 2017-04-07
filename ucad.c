@@ -449,12 +449,16 @@ main (int argc, char **argv)
         g_print ("Error setting properties: %s\n", error->message);
         goto cleanup_manager;
     }
+
     if (error != NULL)
         g_print ("Error: %s\n", error->message);
 
     g_option_context_free (context);
 
     serve (camera, port, &error);
+
+    if (error != NULL)
+        g_print ("Error: %s\n", error->message);
 
 cleanup_camera:
     g_object_unref (camera);
