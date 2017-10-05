@@ -31,3 +31,6 @@ camera = Camera('net', {'host': 'foo.bar:1234'})
 with camera.recording():
     print(camera.grab())
 ```
+
+Besides using the `host` property one can also set the `UCA_NET_HOST`
+environment variable to set the host and port of the remote `ucad` service.
