@@ -137,7 +137,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
         CASE_NUMERIC (G_TYPE_DOUBLE, gdouble, GParamSpecDouble)
             break;
         default:
-            g_warning ("Unsupported property type");
+            g_warning ("Cannot serialize property %s", prop->name);
             return FALSE;
     }
 
