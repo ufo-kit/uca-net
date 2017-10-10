@@ -96,7 +96,9 @@ typedef struct {
             gint values[UCA_NET_MAX_ENUM_LENGTH];
         } genum;
         NUMERIC_STRUCT (gint)
+        NUMERIC_STRUCT (gint64)
         NUMERIC_STRUCT (guint)
+        NUMERIC_STRUCT (guint64)
         NUMERIC_STRUCT (gfloat)
         NUMERIC_STRUCT (gdouble)
     } spec;

@@ -504,7 +504,9 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
                                           prop->spec.genum.default_value, prop->flags);
             }
         CASE_NUMERIC (G_TYPE_INT, int)
+        CASE_NUMERIC (G_TYPE_INT64, int64)
         CASE_NUMERIC (G_TYPE_UINT, uint)
+        CASE_NUMERIC (G_TYPE_UINT64, uint64)
         CASE_NUMERIC (G_TYPE_FLOAT, float)
         CASE_NUMERIC (G_TYPE_DOUBLE, double)
         default:

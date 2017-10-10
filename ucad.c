@@ -150,7 +150,11 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
             break;
         CASE_NUMERIC (G_TYPE_INT, gint, GParamSpecInt)
             break;
+        CASE_NUMERIC (G_TYPE_INT64, gint64, GParamSpecInt64)
+            break;
         CASE_NUMERIC (G_TYPE_UINT, guint, GParamSpecUInt)
+            break;
+        CASE_NUMERIC (G_TYPE_UINT64, guint64, GParamSpecUInt64)
             break;
         CASE_NUMERIC (G_TYPE_FLOAT, gfloat, GParamSpecFloat)
             break;
