@@ -479,6 +479,30 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
             return g_param_spec_string (prop->name, prop->nick, prop->blurb,
                                         prop->spec.gstring.default_value,
                                         prop->flags);
+        case G_TYPE_ENUM:
+            {
+                /* Register a new enum type */
+                GType type;
+                GEnumValue *values;
+
+                /* Allocate one more value to mark the end of the array */
+                values = g_new0 (GEnumValue, prop->spec.genum.n_values + 1);
+
+                for (guint i = 0; i < prop->spec.genum.n_values; i++) {
+                    gchar *name;
+
+                    name = g_strdup_printf ("%s_%i", prop->name, i);
+
+                    values[i].value = prop->spec.genum.values[i];
+                    values[i].value_name = name;
+                    values[i].value_nick = name;
+                }
+
+                type = g_enum_register_static (prop->name, values);
+
+                return g_param_spec_enum (prop->name, prop->nick, prop->blurb, type,
+                                          prop->spec.genum.default_value, prop->flags);
+            }
         CASE_NUMERIC (G_TYPE_INT, int)
         CASE_NUMERIC (G_TYPE_UINT, uint)
         CASE_NUMERIC (G_TYPE_FLOAT, float)

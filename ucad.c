@@ -114,6 +114,26 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
     prop->value_type = pspec->value_type;
     prop->flags = pspec->flags;
 
+    if (g_type_is_a (pspec->value_type, G_TYPE_ENUM)) {
+        GEnumClass *enum_class;
+
+        enum_class = ((GParamSpecEnum *) pspec)->enum_class;
+        prop->value_type = G_TYPE_ENUM;
+        prop->spec.genum.default_value = ((GParamSpecEnum *) pspec)->default_value;
+        prop->spec.genum.minimum = enum_class->minimum;
+        prop->spec.genum.maximum = enum_class->maximum;
+        prop->spec.genum.n_values = enum_class->n_values;
+
+        if (enum_class->n_values > UCA_NET_MAX_ENUM_LENGTH)
+            g_warning ("Cannot serialize all values of %s", prop->name);
+
+        /* We do not transfer the enum value names (yet) ... */
+        for (guint i = 0; i < MIN (enum_class->n_values, UCA_NET_MAX_ENUM_LENGTH); i++)
+            prop->spec.genum.values[i] = enum_class->values[i].value;
+
+        return TRUE;
+    }
+
 #define CASE_NUMERIC(type, storage, typeclass) \
         case type: \
             prop->spec.storage.minimum = ((typeclass *) pspec)->minimum; \
