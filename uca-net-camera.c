@@ -484,6 +484,7 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
         CASE_NUMERIC (G_TYPE_FLOAT, float)
         CASE_NUMERIC (G_TYPE_DOUBLE, double)
         default:
+            g_warning ("Cannot deserialize property %s", prop->name);
             return NULL;
     }
 
