@@ -18,15 +18,16 @@
 #include <glib-object.h>
 #include <gio/gio.h>
 #include <string.h>
+#include <signal.h>
 #include <uca/uca-camera.h>
 #include <uca/uca-plugin-manager.h>
 #include "uca-net-protocol.h"
 #include "config.h"
 
+static GMainLoop *loop;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
 typedef void (*CameraFunc) (UcaCamera *camera, GError **error);
-
 
 typedef struct {
     UcaNetMessageType type;
@@ -414,9 +415,14 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
 }
 
 static void
+sigint_handler (int unused)
+{
+    g_main_loop_quit (loop);
+}
+
+static void
 serve (UcaCamera *camera, guint16 port, GError **error)
 {
-    GMainLoop *loop;
     GSocketService *service;
 
     service = g_threaded_socket_service_new (1);
@@ -427,6 +433,7 @@ serve (UcaCamera *camera, guint16 port, GError **error)
     g_signal_connect (service, "run", G_CALLBACK (run_callback), camera);
 
     loop = g_main_loop_new (NULL, TRUE);
+    signal (SIGINT, sigint_handler);
     g_main_loop_run (loop);
 }
 
