@@ -460,7 +460,7 @@ main (int argc, char **argv)
     g_option_context_add_main_entries (context, entries, NULL);
 
     if (!g_option_context_parse (context, &argc, &argv, &error)) {
-        g_print ("Failed parsing arguments: %s\n", error->message);
+        g_printerr ("Failed parsing arguments: %s\n", error->message);
         goto cleanup_manager;
     }
 
@@ -472,24 +472,24 @@ main (int argc, char **argv)
     camera = uca_plugin_manager_get_camera (manager, argv[argc - 1], &error, NULL);
 
     if (camera == NULL) {
-        g_print ("Error during initialization: %s\n", error->message);
+        g_printerr ("Error during initialization: %s\n", error->message);
         goto cleanup_camera;
     }
 
     if (!uca_camera_parse_arg_props (camera, argv, argc - 1, &error)) {
-        g_print ("Error setting properties: %s\n", error->message);
+        g_printerr ("Error setting properties: %s\n", error->message);
         goto cleanup_manager;
     }
 
     if (error != NULL)
-        g_print ("Error: %s\n", error->message);
+        g_printerr ("Error: %s\n", error->message);
 
     g_option_context_free (context);
 
     serve (camera, port, &error);
 
     if (error != NULL)
-        g_print ("Error: %s\n", error->message);
+        g_printerr ("Error: %s\n", error->message);
 
 cleanup_camera:
     g_object_unref (camera);
