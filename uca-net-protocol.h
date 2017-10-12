@@ -80,6 +80,7 @@ typedef struct {
     gchar name[128];
     gchar nick[128];
     gchar blurb[128];
+    gboolean valid;
 
     union {
         struct {

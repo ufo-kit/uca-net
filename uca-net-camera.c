@@ -521,15 +521,22 @@ static void
 read_property_reply (GObject *object, GInputStream *input, guint index, GError **error)
 {
     UcaNetMessageProperty property;
+    GParamSpec *pspec;
 
-    if (g_input_stream_read_all (input, &property, sizeof (property), NULL, NULL, error)) {
-        GParamSpec *pspec;
-
-        pspec = deserialize_param_spec (&property);
-
-        if (pspec != NULL)
-            g_object_class_install_property (G_OBJECT_GET_CLASS (object), N_PROPERTIES + index + 1, pspec);
+    if (!g_input_stream_read_all (input, &property, sizeof (property), NULL, NULL, error)) {
+        g_warning ("Could not read all property data");
+        return;
     }
+
+    if (!property.valid) {
+        g_warning ("Cannot install unserialized property `%s'", property.name);
+        return;
+    }
+
+    pspec = deserialize_param_spec (&property);
+
+    if (pspec != NULL)
+        g_object_class_install_property (G_OBJECT_GET_CLASS (object), N_PROPERTIES + index + 1, pspec);
 }
 
 static void

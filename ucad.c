@@ -105,7 +105,7 @@ prepare_error_reply (GError *error, UcaNetErrorReply *reply)
     }
 }
 
-static gboolean
+static void
 serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 {
     strncpy (prop->name, g_param_spec_get_name (pspec), sizeof (prop->name));
@@ -114,6 +114,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 
     prop->value_type = pspec->value_type;
     prop->flags = pspec->flags;
+    prop->valid = TRUE;
 
     if (g_type_is_a (pspec->value_type, G_TYPE_ENUM)) {
         GEnumClass *enum_class;
@@ -163,12 +164,11 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
             break;
         default:
             g_warning ("Cannot serialize property %s", prop->name);
-            return FALSE;
+            prop->valid = FALSE;
+            break;
     }
 
 #undef CASE_NUMERIC
-
-    return TRUE;
 }
 
 static void
@@ -186,8 +186,8 @@ handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera,
     for (guint i = N_BASE_PROPERTIES - 1; i < num_properties; i++) {
         UcaNetMessageProperty property;
 
-        if (serialize_param_spec (pspecs[i], &property))
-            send_reply (connection, &property, sizeof (property), error);
+        serialize_param_spec (pspecs[i], &property);
+        send_reply (connection, &property, sizeof (property), error);
     }
 
     g_free (pspecs);
