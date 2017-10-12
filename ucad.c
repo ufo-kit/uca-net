@@ -133,7 +133,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
         for (guint i = 0; i < MIN (enum_class->n_values, UCA_NET_MAX_ENUM_LENGTH); i++)
             prop->spec.genum.values[i] = enum_class->values[i].value;
 
-        return TRUE;
+        return;
     }
 
 #define CASE_NUMERIC(type, storage, typeclass) \
