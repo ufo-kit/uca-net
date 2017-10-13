@@ -415,12 +415,6 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
 }
 
 static void
-sigint_handler (int unused)
-{
-    g_main_loop_quit (loop);
-}
-
-static void
 serve (UcaCamera *camera, guint16 port, GError **error)
 {
     GSocketService *service;
@@ -433,7 +427,7 @@ serve (UcaCamera *camera, guint16 port, GError **error)
     g_signal_connect (service, "run", G_CALLBACK (run_callback), camera);
 
     loop = g_main_loop_new (NULL, TRUE);
-    signal (SIGINT, sigint_handler);
+    g_unix_signal_add (SIGINT, g_main_loop_quit, loop);
     g_main_loop_run (loop);
 }
 
