@@ -16,6 +16,7 @@
    Franklin St, Fifth Floor, Boston, MA 02110, USA */
 
 #include <glib-object.h>
+#include <glib-unix.h>
 #include <gio/gio.h>
 #include <string.h>
 #include <signal.h>
@@ -427,7 +428,7 @@ serve (UcaCamera *camera, guint16 port, GError **error)
     g_signal_connect (service, "run", G_CALLBACK (run_callback), camera);
 
     loop = g_main_loop_new (NULL, TRUE);
-    g_unix_signal_add (SIGINT, g_main_loop_quit, loop);
+    g_unix_signal_add (SIGINT, (GSourceFunc) g_main_loop_quit, loop);
     g_main_loop_run (loop);
 }
 
