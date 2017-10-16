@@ -1,1 +1,2 @@
+#cmakedefine HAVE_UNIX
 #cmakedefine UCA_NET_DEFAULT_PORT ${UCA_NET_DEFAULT_PORT}

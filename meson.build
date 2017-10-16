@@ -7,6 +7,7 @@ plugindir = uca_dep.get_pkgconfig_variable('plugindir')
 
 config = configuration_data()
 config.set('UCA_NET_DEFAULT_PORT', get_option('default_port'))
+config.set('HAVE_UNIX', host_machine.system() != 'windows')
 
 configure_file(
     output: 'config.h',
