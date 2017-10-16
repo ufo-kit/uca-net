@@ -475,7 +475,7 @@ main (int argc, char **argv)
 
     if (camera == NULL) {
         g_printerr ("Error during initialization: %s\n", error->message);
-        goto cleanup_camera;
+        goto cleanup_manager;
     }
 
     if (!uca_camera_parse_arg_props (camera, argv, argc - 1, &error)) {
@@ -493,7 +493,6 @@ main (int argc, char **argv)
     if (error != NULL)
         g_printerr ("Error: %s\n", error->message);
 
-cleanup_camera:
     g_object_unref (camera);
 
 cleanup_manager:
