@@ -3,7 +3,8 @@
 
 #include <gio/gio.h>
 
-#define UCA_NET_MAX_ENUM_LENGTH     128
+#define UCA_NET_MAX_ENUM_LENGTH         32
+#define UCA_NET_MAX_ENUM_NAME_LENGTH    32
 
 typedef enum {
     UCA_NET_MESSAGE_INVALID = 0,
@@ -95,6 +96,7 @@ typedef struct {
             gint maximum;
             guint n_values;
             gint values[UCA_NET_MAX_ENUM_LENGTH];
+            gchar value_names[UCA_NET_MAX_ENUM_LENGTH][UCA_NET_MAX_ENUM_NAME_LENGTH];
         } genum;
         NUMERIC_STRUCT (gint)
         NUMERIC_STRUCT (gint64)

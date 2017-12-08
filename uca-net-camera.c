@@ -491,8 +491,7 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
                 for (guint i = 0; i < prop->spec.genum.n_values; i++) {
                     gchar *name;
 
-                    name = g_strdup_printf ("%s_%i", prop->name, i);
-
+                    name = g_strdup (prop->spec.genum.value_names[i]);
                     values[i].value = prop->spec.genum.values[i];
                     values[i].value_name = name;
                     values[i].value_nick = name;
