@@ -135,6 +135,10 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 
         for (guint i = 0; i < MIN (enum_class->n_values, UCA_NET_MAX_ENUM_LENGTH); i++) {
             prop->spec.genum.values[i] = enum_class->values[i].value;
+
+            if (strlen (enum_class->values[i].value_name) > UCA_NET_MAX_ENUM_NAME_LENGTH)
+                g_warning ("Enum value name too long, expect serious problems");
+
             strncpy (prop->spec.genum.value_names[i], enum_class->values[i].value_name,
                      UCA_NET_MAX_ENUM_NAME_LENGTH);
         }

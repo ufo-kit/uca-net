@@ -4,7 +4,7 @@
 #include <gio/gio.h>
 
 #define UCA_NET_MAX_ENUM_LENGTH         32
-#define UCA_NET_MAX_ENUM_NAME_LENGTH    32
+#define UCA_NET_MAX_ENUM_NAME_LENGTH    128
 
 typedef enum {
     UCA_NET_MESSAGE_INVALID = 0,
