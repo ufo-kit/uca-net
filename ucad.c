@@ -133,12 +133,10 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
         if (enum_class->n_values > UCA_NET_MAX_ENUM_LENGTH)
             g_warning ("Cannot serialize all values of %s", prop->name);
 
-        /* We do not transfer the enum value names (yet) ... */
         for (guint i = 0; i < MIN (enum_class->n_values, UCA_NET_MAX_ENUM_LENGTH); i++) {
             prop->spec.genum.values[i] = enum_class->values[i].value;
             strncpy (prop->spec.genum.value_names[i], enum_class->values[i].value_name,
                      UCA_NET_MAX_ENUM_NAME_LENGTH);
-            g_print ("copied %s\n", prop->spec.genum.value_names[i]);
         }
 
         return;
