@@ -279,13 +279,13 @@ handle_stop_recording_request (GSocketConnection *connection, UcaCamera *camera,
 static void
 handle_start_readout_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    handle_simple_request (connection, camera, message, uca_camera_start_recording, error);
+    handle_simple_request (connection, camera, message, uca_camera_start_readout, error);
 }
 
 static void
 handle_stop_readout_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
-    handle_simple_request (connection, camera, message, uca_camera_stop_recording, error);
+    handle_simple_request (connection, camera, message, uca_camera_stop_readout, error);
 }
 
 static void
