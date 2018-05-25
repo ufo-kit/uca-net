@@ -363,8 +363,20 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
          * that call fails with Python and uca-camera-control but succeeds with
          * uca-grab ... */
         switch (G_VALUE_TYPE (value)) {
+            case G_TYPE_INT:
+                g_value_set_int (value, atol (reply.property_value));
+                break;
+            case G_TYPE_INT64:
+                g_value_set_int (value, atol (reply.property_value));
+                break;
             case G_TYPE_UINT:
                 g_value_set_uint (value, atol (reply.property_value));
+                break;
+            case G_TYPE_UINT64:
+                g_value_set_uint (value, atol (reply.property_value));
+                break;
+            case G_TYPE_FLOAT:
+                g_value_set_float (value, atof (reply.property_value));
                 break;
             case G_TYPE_DOUBLE:
                 g_value_set_double (value, atof (reply.property_value));
