@@ -97,6 +97,7 @@ typedef struct {
             guint n_values;
             gint values[UCA_NET_MAX_ENUM_LENGTH];
             gchar value_names[UCA_NET_MAX_ENUM_LENGTH][UCA_NET_MAX_ENUM_NAME_LENGTH];
+            gchar value_nicks[UCA_NET_MAX_ENUM_LENGTH][UCA_NET_MAX_ENUM_NAME_LENGTH];
         } genum;
         NUMERIC_STRUCT (gint)
         NUMERIC_STRUCT (gint64)

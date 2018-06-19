@@ -501,12 +501,9 @@ deserialize_param_spec (UcaNetMessageProperty *prop)
                 values = g_new0 (GEnumValue, prop->spec.genum.n_values + 1);
 
                 for (guint i = 0; i < prop->spec.genum.n_values; i++) {
-                    gchar *name;
-
-                    name = g_strdup (prop->spec.genum.value_names[i]);
                     values[i].value = prop->spec.genum.values[i];
-                    values[i].value_name = name;
-                    values[i].value_nick = name;
+                    values[i].value_name = g_strdup (prop->spec.genum.value_names[i]);
+                    values[i].value_nick = g_strdup (prop->spec.genum.value_nicks[i]);
                 }
 
                 type = g_enum_register_static (prop->name, values);

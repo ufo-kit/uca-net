@@ -141,6 +141,9 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 
             strncpy (prop->spec.genum.value_names[i], enum_class->values[i].value_name,
                      UCA_NET_MAX_ENUM_NAME_LENGTH);
+
+            strncpy (prop->spec.genum.value_nicks[i], enum_class->values[i].value_nick,
+                     UCA_NET_MAX_ENUM_NAME_LENGTH);
         }
 
         return;
