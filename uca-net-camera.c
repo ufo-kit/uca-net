@@ -568,7 +568,7 @@ uca_net_camera_constructed (GObject *object)
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
 
-    if (priv->host == NULL || !g_strcmp0 (priv->host, "")) {
+    if (priv->host == NULL) {
         const gchar *env;
 
         env = g_getenv ("UCA_NET_HOST");
@@ -616,7 +616,7 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
         g_param_spec_string ("host",
                              "Host name and optional port",
                              "Host name and optional port",
-                             "",
+                             "localhost",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 
     for (guint i = PROP_0 + 1; i < N_BASE_PROPERTIES; i++)
