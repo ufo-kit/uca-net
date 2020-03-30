@@ -568,12 +568,10 @@ uca_net_camera_constructed (GObject *object)
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
 
-    if (priv->host == NULL) {
-        const gchar *env;
+    const gchar *env;
 
-        env = g_getenv ("UCA_NET_HOST");
-        priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
-    }
+    env = g_getenv ("UCA_NET_HOST");
+    priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
 
     connection = connect_socket (priv, &priv->construct_error);
 
