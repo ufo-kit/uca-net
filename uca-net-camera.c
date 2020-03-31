@@ -41,6 +41,8 @@ GQuark uca_net_camera_error_quark ()
 
 enum {
     PROP_HOST = N_BASE_PROPERTIES,
+    IS_RECORDING,
+    IS_READOUT,
     N_PROPERTIES
 };
 
