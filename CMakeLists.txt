@@ -1,29 +1,23 @@
-cmake_minimum_required(VERSION 2.6)
-
-if (POLICY CMP0053)
-cmake_policy(SET CMP0053 OLD)
-endif ()
-
-if (POLICY CMP0054)
-    cmake_policy(SET CMP0054 OLD)
-endif ()
-
+cmake_minimum_required(VERSION 3.10)
 project(ucanet C)
+
+if (NOT EXISTS ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+  message(FATAL_ERROR "Please run 'conan install' first!")
+endif()
+include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+
+conan_basic_setup(TARGETS)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-find_package(PkgConfig)
-
-include(FindPackageHandleStandardArgs)
-include(PkgConfigVars)
 include(GNUInstallDirs)
 
-add_definitions("-std=c99 -Wall -fPIC")
+if (GNU)
+    add_definitions("-std=c99 -Wall -fPIC")
+endif()
+
 add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
-pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
-pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
-pkg_check_variable(libuca plugindir)
 
 set(UCA_NET_DEFAULT_PORT 8989)
 
@@ -49,8 +43,7 @@ link_directories(
 add_library(ucanet SHARED uca-net-camera.c)
 
 target_link_libraries(ucanet
-    ${UCA_LIBRARIES}
-    ${GIO_LIBRARIES})
+    PUBLIC CONAN_PKG::libuca)
 
 install(TARGETS ucanet
         LIBRARY DESTINATION ${LIBUCA_PLUGINDIR}
@@ -60,8 +53,7 @@ install(TARGETS ucanet
 add_executable(ucad ucad.c)
 
 target_link_libraries(ucad
-    ${UCA_LIBRARIES}
-    ${GIO_LIBRARIES})
+    PUBLIC CONAN_PKG::libuca)
 
 install(TARGETS ucad
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
