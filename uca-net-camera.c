@@ -287,7 +287,7 @@ request_set_property (GSocketConnection *connection, const gchar *name, const GV
 
     str = g_value_get_string (&str_value);
     strncpy (request.property_name, name, sizeof (request.property_name));
-    strncpy (request.property_value, str, sizeof (request.property_value));
+    strncpy (request.property_value, str == NULL ? "" : str, sizeof (request.property_value));
 
     if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, error))
         return FALSE;
