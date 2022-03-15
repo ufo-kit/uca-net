@@ -255,6 +255,26 @@ uca_net_camera_grab (UcaCamera *camera,
     return FALSE;
 }
 
+static gboolean
+uca_net_camera_grab_send (UcaCamera *camera, GError **error)
+{
+    UcaNetCameraPrivate *priv;
+    GSocketConnection *connection;
+    gboolean success = FALSE;
+
+    g_return_val_if_fail (UCA_IS_NET_CAMERA (camera), FALSE);
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    connection = connect_socket (priv, error);
+
+    if (send_default_message (connection, UCA_NET_MESSAGE_GRAB_SEND, error)) {
+        success = handle_default_reply (connection, UCA_NET_MESSAGE_GRAB_SEND, error);
+    }
+
+    g_object_unref (connection);
+
+    return success;
+}
+
 static void
 uca_net_camera_trigger (UcaCamera *camera,
                         GError **error)
@@ -610,6 +630,7 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
     camera_class->stop_readout = uca_net_camera_stop_readout;
     camera_class->write = uca_net_camera_write;
     camera_class->grab = uca_net_camera_grab;
+    camera_class->grab_send = uca_net_camera_grab_send;
     camera_class->trigger = uca_net_camera_trigger;
 
     net_properties[PROP_HOST] =

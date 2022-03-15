@@ -39,6 +39,13 @@ typedef struct {
 } HandlerTable;
 
 
+/* Convenience wrapper in order to be able to use it with handle_simple_request. */
+static void
+uca_camera_grab_send_stripped_return_value (UcaCamera *camera, GError **error)
+{
+    uca_camera_grab_send (camera, error);
+}
+
 static gchar *
 get_camera_list (UcaPluginManager *manager)
 {
@@ -229,6 +236,7 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
 
     reply.type = request->type;
     strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
+    g_debug ("Getting `%s': `%s'", request->property_name, reply.property_value);
     send_reply (connection, &reply, sizeof (reply), error);
     g_value_unset (&str_value);
 }
@@ -337,6 +345,11 @@ handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
     }
 }
+static void
+handle_grab_send_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    handle_simple_request (connection, camera, message, uca_camera_grab_send_stripped_return_value, stream_error);
+}
 
 static void
 handle_write_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
@@ -392,6 +405,7 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         { UCA_NET_MESSAGE_STOP_READOUT,     handle_stop_readout_request },
         { UCA_NET_MESSAGE_TRIGGER,          handle_trigger_request },
         { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
+        { UCA_NET_MESSAGE_GRAB_SEND,        handle_grab_send_request },
         { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
