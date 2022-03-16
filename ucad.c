@@ -28,6 +28,11 @@
 #include <glib-unix.h>
 #endif
 
+#ifdef WITH_ZMQ_NETWORKING
+#include <zmq.h>
+#include <json-glib/json-glib.h>
+#endif
+
 static GMainLoop *loop;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
@@ -38,6 +43,19 @@ typedef struct {
     MessageHandler handler;
 } HandlerTable;
 
+typedef enum {
+    UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+    UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
+    UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
+    UCAD_ERROR_ZMQ_BIND_FAILED,
+} UcadError;
+
+#define UCAD_ERROR (ucad_error_quark ())
+
+GQuark ucad_error_quark()
+{
+    return g_quark_from_static_string ("ucad-error-quark");
+}
 
 static gchar *
 get_camera_list (UcaPluginManager *manager)
@@ -183,6 +201,79 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 
 #undef CASE_NUMERIC
 }
+
+#ifdef WITH_ZMQ_NETWORKING
+static gboolean
+push_image (gpointer socket, gpointer buffer, guint width, guint height, guint pixel_size, gint num_sent, GError **error)
+{
+    g_assert (*error == NULL);
+    JsonBuilder *builder = NULL;
+    JsonGenerator *generator = NULL;
+    JsonNode *tree;
+    gchar *header;
+    gsize header_size;
+    GDateTime *dt;
+    gchar *timestamp;
+    gint zmq_retval;
+
+    if (builder == NULL) {
+        builder = json_builder_new_immutable ();
+        generator = json_generator_new ();
+    }
+
+    json_builder_reset (builder);
+    json_builder_begin_object (builder);
+
+    /* Frame number */
+    json_builder_set_member_name (builder, "frame-number");
+    json_builder_add_int_value (builder, num_sent);
+
+    /* Timestamp */
+    dt = g_date_time_new_now_local ();
+    timestamp = g_strdup_printf ("%ld.%d", g_date_time_to_unix (dt), g_date_time_get_microsecond (dt));
+    json_builder_set_member_name (builder, "timestamp");
+    json_builder_add_string_value (builder, timestamp);
+    g_free (timestamp);
+    g_date_time_unref (dt);
+
+    /* Data type, we assume all detectors having unsigned data types */
+    json_builder_set_member_name (builder, "dtype");
+    json_builder_add_string_value (builder, pixel_size == 1 ? "uint8" : "uint16");
+
+    /* Image shape */
+    json_builder_set_member_name (builder, "shape");
+    json_builder_begin_array (builder);
+    json_builder_add_int_value (builder, (gint) width);
+    json_builder_add_int_value (builder, (gint) height);
+    json_builder_end_array (builder);
+
+    /* Create JSON string */
+    json_builder_end_object (builder);
+    tree = json_builder_get_root (builder);
+    json_generator_set_root (generator, tree);
+    header = json_generator_to_data (generator, &header_size);
+    json_node_unref (tree);
+    /* End of header section */
+
+    /* Transmission section */
+    /* First send the header and then the actual payload */
+    zmq_retval = zmq_send (socket, header, header_size, ZMQ_SNDMORE);
+    g_free (header);
+    if (zmq_retval <= 0) {
+        g_set_error (error, UCA_CAMERA_ERROR, UCA_CAMERA_ERROR_SEND,
+                     "sending header failed: %s\n", zmq_strerror (zmq_errno ()));
+        return FALSE;
+    }
+
+    if (zmq_send (socket, buffer, pixel_size * width * height, 0) <= 0) {
+        g_set_error (error, UCA_CAMERA_ERROR, UCA_CAMERA_ERROR_SEND,
+                     "sending data failed: %s\n", zmq_strerror (zmq_errno ()));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+#endif
 
 static void
 handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
@@ -339,6 +430,67 @@ handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 }
 
 static void
+handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    GError *error = NULL;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
+
+#ifdef WITH_ZMQ_NETWORKING
+    UcaNetMessagePushRequest *request;
+    gsize request_size;
+    gint num_sent = 0;
+    static gsize size = 0;
+    static gchar *buffer = NULL;
+    static gpointer context, socket;
+
+    request = (UcaNetMessagePushRequest *) message;
+    request_size = request->width * request->height * request->pixel_size;
+    g_debug ("Push request for %lu frames of size %u x %u x %u bpp",
+             request->num_frames, request->width, request->height, request->pixel_size);
+
+    if (context == NULL) {
+        if ((context = zmq_ctx_new ()) == NULL) {
+            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
+                         "zmq context creation failed: %s\n", zmq_strerror (zmq_errno ()));
+            goto send_error_reply;
+        }
+        if ((socket = zmq_socket (context, ZMQ_PUSH)) == NULL) {
+            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
+                         "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
+            goto send_error_reply;
+        }
+        if (zmq_bind (socket, "tcp://*:5555") != 0) {
+            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
+                         "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
+            goto send_error_reply;
+        }
+    }
+    if (buffer == NULL || size != request_size) {
+        buffer = g_realloc (buffer, request_size);
+        size = request_size;
+    }
+
+    for (guint i = 0; i < request->num_frames; i++) {
+        uca_camera_grab (camera, buffer, &error);
+        if (error != NULL) {
+            goto send_error_reply;
+        }
+        if (!push_image (socket, buffer, request->width, request->height, request->pixel_size, num_sent++, &error)) {
+            goto send_error_reply;
+        }
+    }
+
+#else
+    g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+                 "Sending over network unavailable due to missing zmq prerequisites");
+#endif
+
+send_error_reply:
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+}
+
+static void
 handle_write_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
     GInputStream *input;
@@ -392,6 +544,7 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         { UCA_NET_MESSAGE_STOP_READOUT,     handle_stop_readout_request },
         { UCA_NET_MESSAGE_TRIGGER,          handle_trigger_request },
         { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
+        { UCA_NET_MESSAGE_PUSH,             handle_push_request },
         { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
