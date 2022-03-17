@@ -477,7 +477,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     if (buffer == NULL || size != current_frame_size) {
         if ((buffer = g_realloc (buffer, current_frame_size)) == NULL) {
             g_set_error (&error, UCAD_ERROR, UCAD_ERROR_MEMORY_ALLOCATION_FAILURE,
-                         "Memory allocation failed", zmq_strerror (zmq_errno ()));
+                         "Memory allocation failed");
             goto send_error_reply;
         }
         size = current_frame_size;
