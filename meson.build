@@ -9,6 +9,7 @@ plugindir = uca_dep.get_pkgconfig_variable('plugindir')
 
 config = configuration_data()
 config.set('UCA_NET_DEFAULT_PORT', get_option('default_port'))
+config.set('UCA_NET_ZMQ_DEFAULT_ENDPOINT', get_option('zmq_default_endpoint'))
 config.set('HAVE_UNIX', host_machine.system() != 'windows')
 if zmq_dep.found() and json_dep.found()
   config.set('WITH_ZMQ_NETWORKING', true)

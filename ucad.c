@@ -44,10 +44,13 @@ typedef struct {
 } HandlerTable;
 
 typedef enum {
+    UCAD_ERROR_MEMORY_ALLOCATION_FAILURE,
     UCAD_ERROR_ZMQ_NOT_AVAILABLE,
     UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
     UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
     UCAD_ERROR_ZMQ_BIND_FAILED,
+    UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
+    UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
 } UcadError;
 
 #define UCAD_ERROR (ucad_error_quark ())
@@ -260,13 +263,13 @@ push_image (gpointer socket, gpointer buffer, guint width, guint height, guint p
     zmq_retval = zmq_send (socket, header, header_size, ZMQ_SNDMORE);
     g_free (header);
     if (zmq_retval <= 0) {
-        g_set_error (error, UCA_CAMERA_ERROR, UCA_CAMERA_ERROR_SEND,
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
                      "sending header failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
 
     if (zmq_send (socket, buffer, pixel_size * width * height, 0) <= 0) {
-        g_set_error (error, UCA_CAMERA_ERROR, UCA_CAMERA_ERROR_SEND,
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
                      "sending data failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
@@ -437,16 +440,14 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 
 #ifdef WITH_ZMQ_NETWORKING
     UcaNetMessagePushRequest *request;
-    gsize request_size;
+    gsize current_frame_size;
     gint num_sent = 0;
+    guint pixel_size, width, height, bitdepth;
     static gsize size = 0;
     static gchar *buffer = NULL;
-    static gpointer context, socket;
+    static gpointer context = NULL, socket = NULL;
 
     request = (UcaNetMessagePushRequest *) message;
-    request_size = request->width * request->height * request->pixel_size;
-    g_debug ("Push request for %lu frames of size %u x %u x %u bpp",
-             request->num_frames, request->width, request->height, request->pixel_size);
 
     if (context == NULL) {
         if ((context = zmq_ctx_new ()) == NULL) {
@@ -465,18 +466,28 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             goto send_error_reply;
         }
     }
-    if (buffer == NULL || size != request_size) {
-        buffer = g_realloc (buffer, request_size);
-        size = request_size;
+
+    g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, NULL);
+    pixel_size = bitdepth <= 8 ? 1 : 2;
+    current_frame_size = width * height * pixel_size;
+    g_debug ("Push request for %lu frames of size %u x %u x %u bpp",
+             request->num_frames, width, height, pixel_size);
+
+    if (buffer == NULL || size != current_frame_size) {
+        if ((buffer = g_realloc (buffer, current_frame_size)) == NULL) {
+            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_MEMORY_ALLOCATION_FAILURE,
+                         "Memory allocation failed", zmq_strerror (zmq_errno ()));
+            goto send_error_reply;
+        }
+        size = current_frame_size;
     }
 
     for (guint i = 0; i < request->num_frames; i++) {
-        uca_camera_grab (camera, buffer, &error);
-        if (error != NULL) {
-            goto send_error_reply;
+        if (!uca_camera_grab (camera, buffer, &error)) {
+            break;
         }
-        if (!push_image (socket, buffer, request->width, request->height, request->pixel_size, num_sent++, &error)) {
-            goto send_error_reply;
+        if (!push_image (socket, buffer, width, height, pixel_size, num_sent++, &error)) {
+            break;
         }
     }
 
