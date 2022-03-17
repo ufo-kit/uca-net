@@ -647,8 +647,8 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
 
     net_properties[PROP_HOST] =
         g_param_spec_string ("host",
-                             "Host name and optional port",
-                             "Host name and optional port",
+                             "Host name of ucad",
+                             "Host name of ucad",
                              "localhost",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 
