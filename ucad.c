@@ -461,7 +461,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
                          "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
             goto send_error_reply;
         }
-        if (zmq_bind (socket, "tcp://*:5555") != 0) {
+        if (zmq_bind (socket, UCA_NET_ZMQ_DEFAULT_ENDPOINT) != 0) {
             g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
                          "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
             goto send_error_reply;
