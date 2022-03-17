@@ -61,9 +61,6 @@ typedef struct {
 typedef struct {
     UcaNetMessageType type;
     gsize num_frames;
-    guint width;
-    guint height;
-    gushort pixel_size;
 } UcaNetMessagePushRequest;
 
 typedef struct {
