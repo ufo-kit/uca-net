@@ -116,15 +116,14 @@ request_call (UcaNetCameraPrivate *priv, UcaNetMessageType type, GError **error)
 }
 
 static void
-uca_net_camera_start_recording (UcaCamera *camera,
-                                GError **error)
+uca_net_camera_determine_size (UcaCamera *camera)
 {
-    UcaNetCameraPrivate *priv;
     guint width;
     guint height;
     guint bits;
+    UcaNetCameraPrivate *priv;
 
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
 
     g_object_get (G_OBJECT (camera),
                   "roi-width", &width,
@@ -132,8 +131,19 @@ uca_net_camera_start_recording (UcaCamera *camera,
                   "sensor-bitdepth", &bits,
                   NULL);
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
     priv->size = width * height * (bits > 8 ? 2 : 1);
+}
+
+static void
+uca_net_camera_start_recording (UcaCamera *camera,
+                                GError **error)
+{
+    UcaNetCameraPrivate *priv;
+
+    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+
+    uca_net_camera_determine_size (camera);
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
     request_call (priv, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
@@ -218,6 +228,10 @@ uca_net_camera_grab (UcaCamera *camera,
 
     g_return_val_if_fail (UCA_IS_NET_CAMERA (camera), FALSE);
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+
+    if (!priv->size) {
+        uca_net_camera_determine_size (camera);
+    }
 
     connection = connect_socket (priv, error);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
@@ -659,6 +673,7 @@ uca_net_camera_init (UcaNetCamera *self)
     priv->host = NULL;
     priv->construct_error = NULL;
     priv->client = g_socket_client_new ();
+    priv->size = 0;
 }
 
 G_MODULE_EXPORT GType
