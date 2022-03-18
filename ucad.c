@@ -471,7 +471,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, NULL);
     pixel_size = bitdepth <= 8 ? 1 : 2;
     current_frame_size = width * height * pixel_size;
-    g_debug ("Push request for %lu frames of size %u x %u x %u bpp",
+    g_debug ("Push request for %lu frames of size (%u x %u) and %u bytes per pixel",
              request->num_frames, width, height, pixel_size);
 
     if (buffer == NULL || size != current_frame_size) {
@@ -491,6 +491,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             break;
         }
     }
+    g_debug ("Pushed %lu frames", request->num_frames);
 
 #else
     g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
