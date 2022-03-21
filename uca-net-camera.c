@@ -416,6 +416,11 @@ uca_net_camera_get_property (GObject *object,
         return;
     }
 
+    if (priv->client == NULL) {
+        g_debug ("Not requesting property becuase connection has been already closed");
+        return;
+    }
+
     /* handle remote props */
     connection = connect_socket (priv, &error);
     name = g_param_spec_get_name (pspec);
