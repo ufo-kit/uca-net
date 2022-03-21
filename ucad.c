@@ -230,6 +230,7 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
     reply.type = request->type;
     strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
     send_reply (connection, &reply, sizeof (reply), error);
+    g_debug ("Getting `%s'=`%s'", request->property_name, reply.property_value);
     g_value_unset (&str_value);
 }
 
