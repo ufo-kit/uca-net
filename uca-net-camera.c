@@ -603,6 +603,8 @@ uca_net_camera_constructed (GObject *object)
 
         g_object_unref (connection);
     }
+
+    G_OBJECT_CLASS (uca_net_camera_parent_class)->constructed (object);
 }
 
 static void
