@@ -453,6 +453,11 @@ serve (UcaCamera *camera, guint16 port, GError **error)
 int
 main (int argc, char **argv)
 {
+#ifdef UCA_WITH_PYTHON_MULTITHREADING
+    g_error ("libuca must be compiled without Python support on the server side\n"
+             "libuca meson configuration fix: \"meson configure -Dwith_python_multithreading=false\"\n"
+             "libuca cmake configuration fix: \"cmake -DWITH_PYTHON_MULTITHREADING=OFF ...\"");
+#endif
     GOptionContext *context;
     UcaPluginManager *manager;
     UcaCamera *camera;

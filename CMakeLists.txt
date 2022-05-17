@@ -22,8 +22,12 @@ add_definitions("-std=c99 -Wall -fPIC")
 add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
 pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
-pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
+pkg_check_modules(UCA libuca>=2.4.1 REQUIRED)
 pkg_check_variable(libuca plugindir)
+pkg_check_variable(libuca with_python_multithreading)
+if ("${LIBUCA_WITH_PYTHON_MULTITHREADING}" STREQUAL "ON")
+    set(UCA_WITH_PYTHON_MULTITHREADING "Was libuca compiled with Python support" ON)
+endif()
 
 set(UCA_NET_DEFAULT_PORT 8989)
 
