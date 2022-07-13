@@ -141,8 +141,10 @@ uca_net_camera_start_recording (UcaCamera *camera,
 
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
 
-    uca_net_camera_determine_size (camera);
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    if (!priv->size) {
+        uca_net_camera_determine_size (camera);
+    }
     request_call (priv, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
@@ -334,6 +336,11 @@ uca_net_camera_set_property (GObject *object,
     connection = connect_socket (priv, &error);
     g_return_if_fail (connection != NULL);
     name = g_param_spec_get_name (pspec);
+
+    if (property_id == PROP_ROI_HEIGHT || property_id == PROP_ROI_WIDTH) {
+        /* Invalidate cached frame size*/
+        priv->size = 0;
+    }
 
     if (!request_set_property (connection, name, value, &error))
         g_warning ("Could not set property: %s", error->message);
