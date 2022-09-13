@@ -41,9 +41,6 @@ GQuark uca_net_camera_error_quark ()
 
 enum {
     PROP_HOST = N_BASE_PROPERTIES,
-    PROP_PORT,
-    IS_RECORDING,
-    IS_READOUT,
     N_PROPERTIES
 };
 
@@ -109,6 +106,7 @@ request_call (UcaNetCameraPrivate *priv, UcaNetMessageType type, GError **error)
     GSocketConnection *connection;
 
     connection = connect_socket (priv, error);
+    g_return_if_fail (connection != NULL);
 
     if (send_default_message (connection, type, error))
         handle_default_reply (connection, type, error);
@@ -117,15 +115,14 @@ request_call (UcaNetCameraPrivate *priv, UcaNetMessageType type, GError **error)
 }
 
 static void
-uca_net_camera_start_recording (UcaCamera *camera,
-                                GError **error)
+uca_net_camera_determine_size (UcaCamera *camera)
 {
-    UcaNetCameraPrivate *priv;
     guint width;
     guint height;
     guint bits;
+    UcaNetCameraPrivate *priv;
 
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
 
     g_object_get (G_OBJECT (camera),
                   "roi-width", &width,
@@ -133,8 +130,21 @@ uca_net_camera_start_recording (UcaCamera *camera,
                   "sensor-bitdepth", &bits,
                   NULL);
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
     priv->size = width * height * (bits > 8 ? 2 : 1);
+}
+
+static void
+uca_net_camera_start_recording (UcaCamera *camera,
+                                GError **error)
+{
+    UcaNetCameraPrivate *priv;
+
+    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+
+    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    if (!priv->size) {
+        uca_net_camera_determine_size (camera);
+    }
     request_call (priv, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
@@ -180,6 +190,7 @@ uca_net_camera_write (UcaCamera *camera,
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
     connection = connect_socket (priv, error);
+    g_return_if_fail (connection != NULL);
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     request.size = size;
     strncpy (request.name, name, sizeof (request.name));
@@ -220,7 +231,12 @@ uca_net_camera_grab (UcaCamera *camera,
     g_return_val_if_fail (UCA_IS_NET_CAMERA (camera), FALSE);
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
 
+    if (!priv->size) {
+        uca_net_camera_determine_size (camera);
+    }
+
     connection = connect_socket (priv, error);
+    g_return_val_if_fail (connection != NULL, FALSE);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     request.size = priv->size;
@@ -318,7 +334,13 @@ uca_net_camera_set_property (GObject *object,
 
     /* handle remote props */
     connection = connect_socket (priv, &error);
+    g_return_if_fail (connection != NULL);
     name = g_param_spec_get_name (pspec);
+
+    if (property_id == PROP_ROI_HEIGHT || property_id == PROP_ROI_WIDTH) {
+        /* Invalidate cached frame size*/
+        priv->size = 0;
+    }
 
     if (!request_set_property (connection, name, value, &error))
         g_warning ("Could not set property: %s", error->message);
@@ -421,8 +443,14 @@ uca_net_camera_get_property (GObject *object,
             return;
     }
 
+    if (priv->client == NULL) {
+        g_debug ("Not requesting property becuase connection has been already closed");
+        return;
+    }
+
     /* handle remote props */
     connection = connect_socket (priv, &error);
+    g_return_if_fail (connection != NULL);
     name = g_param_spec_get_name (pspec);
 
     if (!request_get_property (connection, name, value, &error))
@@ -434,7 +462,21 @@ uca_net_camera_get_property (GObject *object,
 static void
 uca_net_camera_dispose (GObject *object)
 {
-    g_object_unref (UCA_NET_CAMERA_GET_PRIVATE (object)->client);
+    UcaNetCameraPrivate *priv;
+
+    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+
+    if (uca_camera_is_recording (UCA_CAMERA (object))) {
+        GError *error = NULL;
+
+        uca_camera_stop_recording (UCA_CAMERA (object), &error);
+        if (error != NULL) {
+            g_warning ("Could not stop recording: %s", error->message);
+            g_error_free (error);
+        }
+    }
+
+    g_clear_object (&priv->client);
     G_OBJECT_CLASS (uca_net_camera_parent_class)->dispose (object);
 }
 
@@ -589,6 +631,8 @@ uca_net_camera_constructed (GObject *object)
 
         g_object_unref (connection);
     }
+
+    G_OBJECT_CLASS (uca_net_camera_parent_class)->constructed (object);
 }
 
 static void
@@ -650,6 +694,7 @@ uca_net_camera_init (UcaNetCamera *self)
     priv->host = NULL;
     priv->construct_error = NULL;
     priv->client = g_socket_client_new ();
+    priv->size = 0;
 }
 
 G_MODULE_EXPORT GType
