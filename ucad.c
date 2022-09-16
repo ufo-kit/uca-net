@@ -34,6 +34,8 @@
 #endif
 
 static GMainLoop *loop;
+static GMutex access_lock;
+static gboolean stop_streaming_requested = FALSE;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
 typedef void (*CameraFunc) (UcaCamera *camera, GError **error);
@@ -495,6 +497,12 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     }
 
     for (guint i = 0; i < request->num_frames; i++) {
+        if (stop_streaming_requested) {
+            /* Reset */
+            stop_streaming_requested = FALSE;
+            g_debug ("Stop stream upon request");
+            break;
+        }
         if (!uca_camera_grab (camera, buffer, &error)) {
             break;
         }
@@ -502,7 +510,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             break;
         }
     }
-    g_debug ("Pushed %lu frames", request->num_frames);
+    g_debug ("Pushed %d frames", num_sent);
 
 #else
     g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
@@ -511,6 +519,15 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 
 send_error_reply:
     prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+}
+
+static void
+handle_stop_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    g_debug ("Stop push request");
+    stop_streaming_requested = TRUE;
+    UcaNetDefaultReply reply = { .type = ((UcaNetMessageDefault *) message)->type };
     send_reply (connection, &reply, sizeof (reply), stream_error);
 }
 
@@ -569,6 +586,7 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         { UCA_NET_MESSAGE_TRIGGER,          handle_trigger_request },
         { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
         { UCA_NET_MESSAGE_PUSH,             handle_push_request },
+        { UCA_NET_MESSAGE_STOP_PUSH,        handle_stop_push_request },
         { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
@@ -591,8 +609,18 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
     }
     else {
         for (guint i = 0; table[i].type != UCA_NET_MESSAGE_INVALID; i++) {
-            if (table[i].type == message->type)
+            if (table[i].type == message->type) {
+                /* We allow only one request at a time by using a lock. The only
+                 * exception is the request to stop the stream which must be
+                 * able to arrive while the streaming is in progress. */
+                if (message->type != UCA_NET_MESSAGE_STOP_PUSH) {
+                    g_mutex_lock (&access_lock);
+                }
                 table[i].handler (connection, camera, buffer, &error);
+                if (message->type != UCA_NET_MESSAGE_STOP_PUSH) {
+                    g_mutex_unlock (&access_lock);
+                }
+            }
         }
 
         if (error != NULL) {
@@ -610,7 +638,7 @@ serve (UcaCamera *camera, guint16 port, GError **error)
 {
     GSocketService *service;
 
-    service = g_threaded_socket_service_new (1);
+    service = g_threaded_socket_service_new (2);
 
     if (!g_socket_listener_add_inet_port (G_SOCKET_LISTENER (service), port, NULL, error))
         return;
