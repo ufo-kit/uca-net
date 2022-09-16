@@ -228,27 +228,32 @@ push_image (gpointer socket, gpointer buffer, guint width, guint height, guint p
     json_builder_begin_object (builder);
 
     /* Frame number */
-    json_builder_set_member_name (builder, "frame-number");
-    json_builder_add_int_value (builder, num_sent);
+    if (buffer != NULL) {
+        json_builder_set_member_name (builder, "frame-number");
+        json_builder_add_int_value (builder, num_sent);
 
-    /* Timestamp */
-    dt = g_date_time_new_now_local ();
-    timestamp = g_strdup_printf ("%ld.%d", g_date_time_to_unix (dt), g_date_time_get_microsecond (dt));
-    json_builder_set_member_name (builder, "timestamp");
-    json_builder_add_string_value (builder, timestamp);
-    g_free (timestamp);
-    g_date_time_unref (dt);
+        /* Timestamp */
+        dt = g_date_time_new_now_local ();
+        timestamp = g_strdup_printf ("%ld.%d", g_date_time_to_unix (dt), g_date_time_get_microsecond (dt));
+        json_builder_set_member_name (builder, "timestamp");
+        json_builder_add_string_value (builder, timestamp);
+        g_free (timestamp);
+        g_date_time_unref (dt);
 
-    /* Data type, we assume all detectors having unsigned data types */
-    json_builder_set_member_name (builder, "dtype");
-    json_builder_add_string_value (builder, pixel_size == 1 ? "uint8" : "uint16");
+        /* Data type, we assume all detectors having unsigned data types */
+        json_builder_set_member_name (builder, "dtype");
+        json_builder_add_string_value (builder, pixel_size == 1 ? "uint8" : "uint16");
 
-    /* Image shape */
-    json_builder_set_member_name (builder, "shape");
-    json_builder_begin_array (builder);
-    json_builder_add_int_value (builder, (gint) width);
-    json_builder_add_int_value (builder, (gint) height);
-    json_builder_end_array (builder);
+        /* Image shape */
+        json_builder_set_member_name (builder, "shape");
+        json_builder_begin_array (builder);
+        json_builder_add_int_value (builder, (gint) width);
+        json_builder_add_int_value (builder, (gint) height);
+        json_builder_end_array (builder);
+    } else {
+        json_builder_set_member_name (builder, "end");
+        json_builder_add_boolean_value (builder, TRUE);
+    }
 
     /* Create JSON string */
     json_builder_end_object (builder);
@@ -260,7 +265,7 @@ push_image (gpointer socket, gpointer buffer, guint width, guint height, guint p
 
     /* Transmission section */
     /* First send the header and then the actual payload */
-    zmq_retval = zmq_send (socket, header, header_size, ZMQ_SNDMORE);
+    zmq_retval = zmq_send (socket, header, header_size, buffer != NULL ? ZMQ_SNDMORE : 0);
     g_free (header);
     if (zmq_retval <= 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
@@ -268,7 +273,7 @@ push_image (gpointer socket, gpointer buffer, guint width, guint height, guint p
         return FALSE;
     }
 
-    if (zmq_send (socket, buffer, pixel_size * width * height, 0) <= 0) {
+    if (buffer != NULL && zmq_send (socket, buffer, pixel_size * width * height, 0) <= 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
                      "sending data failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
@@ -466,6 +471,12 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
                          "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
             goto send_error_reply;
         }
+    }
+
+    if (request->num_frames == 0) {
+        /* Request for ending the stream */
+        g_debug ("Pushed end of stream, result: %d", push_image (socket, NULL, 0, 0, 0, 0, &error));
+        goto send_error_reply;
     }
 
     g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, NULL);
