@@ -612,11 +612,18 @@ uca_net_camera_constructed (GObject *object)
     GSocketConnection *connection;
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
-
-    const gchar *env;
-
-    env = g_getenv ("UCA_NET_HOST");
-    priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
+    if (g_string_equal((const GString *) priv->host, (const GString *) g_strdup(""))){
+        // host not set by plugin_manager
+        const gchar *env = g_getenv ("UCA_NET_HOST");
+        if (env != NULL){
+            g_free(priv->host);
+            priv->host = g_strdup(env);
+        }
+        else{
+            g_set_error_literal(&priv->construct_error, uca_net_camera_error_quark(), 0, "No host defined.");
+            return;
+        }
+    }
 
     connection = connect_socket (priv, &priv->construct_error);
 
@@ -661,7 +668,7 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
         g_param_spec_string ("host",
                              "Host name and optional port",
                              "Host name and optional port",
-                             "localhost",
+                             "",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
 
     for (guint i = PROP_0 + 1; i < N_BASE_PROPERTIES; i++)
