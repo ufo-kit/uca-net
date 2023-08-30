@@ -19,6 +19,8 @@ typedef enum {
     UCA_NET_MESSAGE_GRAB,
     UCA_NET_MESSAGE_PUSH,
     UCA_NET_MESSAGE_STOP_PUSH,
+    UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT,
+    UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT,
     UCA_NET_MESSAGE_WRITE,
 } UcaNetMessageType;
 
@@ -63,6 +65,11 @@ typedef struct {
     UcaNetMessageType type;
     gint64 num_frames;
 } UcaNetMessagePushRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gchar endpoint[128];
+} UcaNetMessageZmqEndpointRequest;
 
 typedef struct {
     UcaNetMessageType type;
