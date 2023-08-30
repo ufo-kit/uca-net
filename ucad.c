@@ -36,6 +36,7 @@
 static GMainLoop *loop;
 static GMutex access_lock;
 static gboolean stop_streaming_requested = FALSE;
+static GTree *zmq_endpoints = NULL;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
 typedef void (*CameraFunc) (UcaCamera *camera, GError **error);
@@ -53,7 +54,19 @@ typedef enum {
     UCAD_ERROR_ZMQ_BIND_FAILED,
     UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
     UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
+    UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
 } UcadError;
+
+typedef struct {
+    gpointer socket;
+    gpointer buffer;
+    gpointer header;
+    gsize buffer_size;
+    gsize header_size;
+    GAsyncQueue *data_queue;
+    GAsyncQueue *feedback_queue;
+    GError **error;
+} ZmqPushData;
 
 #define UCAD_ERROR (ucad_error_quark ())
 
@@ -207,19 +220,22 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 #undef CASE_NUMERIC
 }
 
-#ifdef WITH_ZMQ_NETWORKING
-static gboolean
-push_image (gpointer socket, gpointer buffer, guint width, guint height, guint pixel_size, gint num_sent, GError **error)
+gint
+ucad_strcmp0_data (gconstpointer a, gconstpointer b, gpointer data)
 {
-    g_assert (*error == NULL);
+    return g_strcmp0 ((const gchar *) a, (const gchar *) b);
+}
+
+static gchar *
+ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, gint num_sent, gsize *length)
+{
+    /* TODO: num_sent will overflow, change! */
     JsonBuilder *builder = NULL;
     JsonGenerator *generator = NULL;
     JsonNode *tree;
     gchar *header;
-    gsize header_size;
     GDateTime *dt;
     gchar *timestamp;
-    gint zmq_retval;
 
     if (builder == NULL) {
         builder = json_builder_new_immutable ();
@@ -261,27 +277,133 @@ push_image (gpointer socket, gpointer buffer, guint width, guint height, guint p
     json_builder_end_object (builder);
     tree = json_builder_get_root (builder);
     json_generator_set_root (generator, tree);
-    header = json_generator_to_data (generator, &header_size);
+    header = json_generator_to_data (generator, length);
     json_node_unref (tree);
-    /* End of header section */
 
-    /* Transmission section */
-    /* First send the header and then the actual payload */
-    zmq_retval = zmq_send (socket, header, header_size, buffer != NULL ? ZMQ_SNDMORE : 0);
-    g_free (header);
-    if (zmq_retval <= 0) {
-        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
-                     "sending header failed: %s\n", zmq_strerror (zmq_errno ()));
+    return header;
+}
+
+gboolean
+udad_zmq_endpoints_to_list (gpointer key, gpointer value, gpointer data)
+{
+    GList **list = (GList **) data;
+    *list = g_list_append(*list, value);
+
+    return FALSE;
+}
+
+static void
+udad_zmq_push_to_all (GList *endpoints, gchar *buffer, gsize buffer_size, gchar *header, gsize header_size, gint64 *index)
+{
+    GList *ep_it = NULL;
+    ZmqPushData *pdata;
+
+    for (ep_it = endpoints; ep_it != NULL; ep_it = ep_it->next) {
+        pdata = (ZmqPushData *) ep_it->data;
+        pdata->buffer = buffer;
+        pdata->buffer_size = buffer_size;
+        pdata->header = header;
+        pdata->header_size = header_size;
+        g_async_queue_push (pdata->data_queue, index);
+    }
+}
+
+static gboolean
+udad_zmq_wait_for_all (GList *endpoints)
+{
+    GList *ep_it = NULL;
+    ZmqPushData *pdata;
+    gboolean success = TRUE;
+
+    for (ep_it = endpoints; ep_it != NULL; ep_it = ep_it->next) {
+        pdata = (ZmqPushData *) ep_it->data;
+
+        if (!*((gboolean *) g_async_queue_pop (pdata->feedback_queue))) {
+            success = FALSE;
+        }
+    }
+
+    return success;
+}
+
+#ifdef WITH_ZMQ_NETWORKING
+static gboolean
+ucad_zmq_push_data_init (ZmqPushData *pd, gpointer context, gchar *endpoint, GError **error)
+{
+    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+    pd->socket = NULL;
+
+    if ((pd->socket = zmq_socket (context, ZMQ_PUSH)) == NULL) {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
+                     "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
+        return FALSE;
+    }
+    if (zmq_bind (pd->socket, endpoint) != 0) {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
+                     "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
 
-    if (buffer != NULL && zmq_send (socket, buffer, pixel_size * width * height, 0) <= 0) {
-        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
-                     "sending data failed: %s\n", zmq_strerror (zmq_errno ()));
-        return FALSE;
-    }
+    pd->data_queue = g_async_queue_new ();
+    pd->feedback_queue = g_async_queue_new ();
 
     return TRUE;
+}
+
+static void
+ucad_zmq_push_data_free (gpointer data)
+{
+    gchar endpoint[128];
+    gsize size = sizeof (endpoint);
+    ZmqPushData *pd = (ZmqPushData *) data;
+
+    if (zmq_getsockopt (pd->socket, ZMQ_LAST_ENDPOINT, endpoint, &size)) {
+        g_warning ("zmq_getsockopt failed: %s\n", zmq_strerror (zmq_errno ()));
+    } else {
+        g_debug ("Freeing `%s'", endpoint);
+    }
+
+    if (zmq_close (pd->socket)) {
+        g_warning ("zmq socket destruction failed: %s\n", zmq_strerror (zmq_errno ()));
+    }
+    pd->socket = NULL;
+    g_async_queue_unref (pd->data_queue);
+    g_async_queue_unref (pd->feedback_queue);
+}
+
+static void
+ucad_zmq_send_images (ZmqPushData *pdata, gpointer static_data)
+{
+    g_assert (*pdata->error == NULL);
+
+    gboolean success;
+    gint zmq_retval;
+
+    while (TRUE) {
+        g_async_queue_pop (pdata->data_queue);
+        success = TRUE;
+
+        /* First send the header and then the actual payload */
+        zmq_retval = zmq_send (pdata->socket, pdata->header, pdata->header_size, pdata->buffer != NULL ? ZMQ_SNDMORE : 0);
+
+        if (zmq_retval <= 0) {
+            g_set_error (pdata->error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_HEADER_FAILED,
+                         "sending header failed: %s\n", zmq_strerror (zmq_errno ()));
+            success = FALSE;
+        } else if (pdata->buffer != NULL && zmq_send (pdata->socket, pdata->buffer, pdata->buffer_size, 0) <= 0) {
+            g_set_error (pdata->error, UCAD_ERROR, UCAD_ERROR_ZMQ_SENDING_PAYLOAD_FAILED,
+                         "sending data failed: %s\n", zmq_strerror (zmq_errno ()));
+            success = FALSE;
+        }
+
+        g_async_queue_push (pdata->feedback_queue, &success);
+
+        if (pdata->buffer == NULL || !success) {
+            break;
+        }
+    }
+
+    g_debug ("Sending loop finished");
 }
 #endif
 
@@ -451,40 +573,38 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     gsize current_frame_size;
     gint num_sent = 0;
     guint pixel_size, width, height, bitdepth;
-    static gsize size = 0;
+    gsize header_size;
+    gchar *header = NULL;
+    gboolean success_all;
+    gint num_endpoints = g_tree_nnodes (zmq_endpoints);
+    ZmqPushData *pdata;
+    gsize size = 0;
+    gint64 i;
     static gchar *buffer = NULL;
-    static gpointer context = NULL, socket = NULL;
+    GList *ep_list = NULL, *ep_it = NULL;
+    GThreadPool *pool = g_thread_pool_new (
+            (GFunc) ucad_zmq_send_images,
+            NULL,
+            num_endpoints,
+            FALSE,
+            &error
+    );
+    if (error != NULL) {
+        goto send_error_reply;
+    }
 
     request = (UcaNetMessagePushRequest *) message;
 
-    if (context == NULL) {
-        if ((context = zmq_ctx_new ()) == NULL) {
-            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
-                         "zmq context creation failed: %s\n", zmq_strerror (zmq_errno ()));
-            goto send_error_reply;
-        }
-        if ((socket = zmq_socket (context, ZMQ_PUSH)) == NULL) {
-            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
-                         "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
-            goto send_error_reply;
-        }
-        if (zmq_bind (socket, UCA_NET_ZMQ_DEFAULT_ENDPOINT) != 0) {
-            g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
-                         "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
-            goto send_error_reply;
-        }
-    }
-
     if (request->num_frames == 0) {
-        /* Request for ending the stream */
-        g_debug ("Pushed end of stream, result: %d", push_image (socket, NULL, 0, 0, 0, 0, &error));
         goto send_error_reply;
     }
+
+    g_tree_foreach (zmq_endpoints, udad_zmq_endpoints_to_list, &ep_list);
 
     g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, NULL);
     pixel_size = bitdepth <= 8 ? 1 : 2;
     current_frame_size = width * height * pixel_size;
-    g_debug ("Push request for %lu frames of size (%u x %u) and %u bytes per pixel",
+    g_debug ("Push request for %ld frames of size (%u x %u) and %u bytes per pixel",
              request->num_frames, width, height, pixel_size);
 
     if (buffer == NULL || size != current_frame_size) {
@@ -496,21 +616,56 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         size = current_frame_size;
     }
 
-    for (guint i = 0; i < request->num_frames; i++) {
+    /* Prepare data structures */
+    for (ep_it = ep_list; ep_it != NULL; ep_it = ep_it->next) {
+        pdata = (ZmqPushData *) ep_it->data;
+        /* pdata->buffer = buffer; */
+        /* pdata->buffer_size = size; */
+        pdata->error = &error;
+        g_thread_pool_push (pool, pdata, &error);
+        if (error != NULL) {
+            goto send_error_reply;
+        }
+    }
+
+    i = request->num_frames;
+    while (TRUE) {
+        if (request->num_frames >= 0) {
+            /* If the number of requested frames is negative, stream until stop
+             * is requested via UCA_NET_MESSAGE_STOP_PUSH => do not decrement i. */
+            i--;
+        }
         if (stop_streaming_requested) {
-            /* Reset */
+            /* Whatever number of images was sent, stop immediately */
+            i = 0;
             stop_streaming_requested = FALSE;
             g_debug ("Stop stream upon request");
-            break;
         }
         if (!uca_camera_grab (camera, buffer, &error)) {
             break;
         }
-        if (!push_image (socket, buffer, width, height, pixel_size, num_sent++, &error)) {
+
+        /* Make new header, update data structures and send request */
+        header = ucad_zmq_create_image_header (buffer, width, height, pixel_size, num_sent, &header_size);
+        udad_zmq_push_to_all (ep_list, buffer, size, header, header_size, &i);
+
+        /* Get ACK from the sender threads */
+        success_all = udad_zmq_wait_for_all (ep_list);
+        if (success_all) {
+            num_sent++;
+        } else {
+            break;
+        }
+
+        if (i == 0) {
+            /* Send end of stream indicator and stop */
+            header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, &header_size);
+            udad_zmq_push_to_all (ep_list, NULL, 0, header, header_size, &i);
+            success_all = udad_zmq_wait_for_all (ep_list);
             break;
         }
     }
-    g_debug ("Pushed %d frames", num_sent);
+    g_thread_pool_free (pool, FALSE, TRUE);
 
 #else
     g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
@@ -518,6 +673,11 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #endif
 
 send_error_reply:
+    g_debug ("Pushed %d frames", num_sent);
+    g_list_free (ep_list);
+    if (header) {
+        g_free (header);
+    }
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
 }
@@ -529,6 +689,67 @@ handle_stop_push_request (GSocketConnection *connection, UcaCamera *camera, gpoi
     stop_streaming_requested = TRUE;
     UcaNetDefaultReply reply = { .type = ((UcaNetMessageDefault *) message)->type };
     send_reply (connection, &reply, sizeof (reply), stream_error);
+}
+
+static void
+handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    UcaNetMessageZmqEndpointRequest *request = (UcaNetMessageZmqEndpointRequest *) message;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT };
+    static gpointer context = NULL;
+    ZmqPushData *pd = g_new (ZmqPushData, 1);
+    GError *error = NULL;
+
+    if (zmq_endpoints == NULL) {
+        /* zmq_endpoints = g_tree_new ((GCompareFunc) g_strcmp0); */
+        zmq_endpoints = g_tree_new_full (ucad_strcmp0_data, NULL, g_free, ucad_zmq_push_data_free);
+    }
+
+    if (g_tree_lookup (zmq_endpoints, request->endpoint) == NULL) {
+        g_debug ("Adding endpoint `%s'", request->endpoint);
+        if (context == NULL) {
+            if ((context = zmq_ctx_new ()) == NULL) {
+                g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
+                             "zmq context creation failed: %s\n", zmq_strerror (zmq_errno ()));
+                goto send_error_reply;
+            }
+        }
+        if (!ucad_zmq_push_data_init (pd, context, request->endpoint, &error)) {
+            goto send_error_reply;
+        }
+        g_tree_insert (zmq_endpoints, g_strdup (request->endpoint), pd);
+    } else {
+        g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                     "zmq endpoint already in list: %s\n", request->endpoint);
+        g_debug ("Endpoint `%s' already in list", request->endpoint);
+    }
+
+send_error_reply:
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+    g_debug ("Current number of endpoints: %d", g_tree_nnodes (zmq_endpoints));
+}
+
+static void
+handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    UcaNetMessageZmqEndpointRequest *request = (UcaNetMessageZmqEndpointRequest *) message;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT };
+    GError *error = NULL;
+    ZmqPushData *pd = g_tree_lookup (zmq_endpoints, request->endpoint);
+
+    if (pd == NULL) {
+        g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                     "zmq endpoint not in list: %s\n", request->endpoint);
+        g_debug ("Endpoint `%s' not in list", request->endpoint);
+    } else {
+        g_tree_remove (zmq_endpoints, request->endpoint);
+        g_debug ("Removed endpoint `%s'", request->endpoint);
+    }
+
+    prepare_error_reply (error, &reply.error);
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+    g_debug ("Current number of endpoints: %d", g_tree_nnodes (zmq_endpoints));
 }
 
 static void
@@ -587,6 +808,9 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         { UCA_NET_MESSAGE_GRAB,             handle_grab_request },
         { UCA_NET_MESSAGE_PUSH,             handle_push_request },
         { UCA_NET_MESSAGE_STOP_PUSH,        handle_stop_push_request },
+        { UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT, handle_zmq_add_endpoint_request },
+        { UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT,
+                                            handle_zmq_remove_endpoint_request },
         { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
