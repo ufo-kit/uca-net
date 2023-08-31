@@ -328,21 +328,33 @@ udad_zmq_wait_for_all (GList *endpoints)
 
 #ifdef WITH_ZMQ_NETWORKING
 static gboolean
-ucad_zmq_push_data_init (ZmqPushData *pd, gpointer context, gchar *endpoint, GError **error)
+ucad_zmq_push_data_init (ZmqPushData *pd, gpointer context, gchar *endpoint, gint socket_type, GError **error)
 {
+    gint hwm = 1;
+    gsize size = sizeof (gint);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
     pd->socket = NULL;
 
-    if ((pd->socket = zmq_socket (context, ZMQ_PUSH)) == NULL) {
+    if ((pd->socket = zmq_socket (context, socket_type)) == NULL) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
                      "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
+    }
+    if (socket_type == ZMQ_PUB && zmq_setsockopt (pd->socket, ZMQ_SNDHWM, &hwm, sizeof (gint)) != 0) {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
+                     "zmq setting HWM failed: %s\n", zmq_strerror (zmq_errno ()));
+        return FALSE;
+    }
+    if (zmq_getsockopt (pd->socket, ZMQ_SNDHWM, &hwm, &size) != 0) {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
+                     "zmq getting HWM failed: %s\n", zmq_strerror (zmq_errno ()));
     }
     if (zmq_bind (pd->socket, endpoint) != 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
                      "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
+    g_debug ("Created socket `%s' of type=%d with SNDHWM=%d", endpoint, socket_type, hwm);
 
     pd->data_queue = g_async_queue_new ();
     pd->feedback_queue = g_async_queue_new ();
@@ -694,7 +706,7 @@ handle_stop_push_request (GSocketConnection *connection, UcaCamera *camera, gpoi
 static void
 handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
-    UcaNetMessageZmqEndpointRequest *request = (UcaNetMessageZmqEndpointRequest *) message;
+    UcaNetMessageAddZmqEndpointRequest *request = (UcaNetMessageAddZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT };
     static gpointer context = NULL;
     ZmqPushData *pd = g_new (ZmqPushData, 1);
@@ -714,7 +726,7 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
                 goto send_error_reply;
             }
         }
-        if (!ucad_zmq_push_data_init (pd, context, request->endpoint, &error)) {
+        if (!ucad_zmq_push_data_init (pd, context, request->endpoint, request->socket_type, &error)) {
             goto send_error_reply;
         }
         g_tree_insert (zmq_endpoints, g_strdup (request->endpoint), pd);
@@ -733,7 +745,7 @@ send_error_reply:
 static void
 handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
-    UcaNetMessageZmqEndpointRequest *request = (UcaNetMessageZmqEndpointRequest *) message;
+    UcaNetMessageRemoveZmqEndpointRequest *request = (UcaNetMessageRemoveZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT };
     GError *error = NULL;
     ZmqPushData *pd = g_tree_lookup (zmq_endpoints, request->endpoint);

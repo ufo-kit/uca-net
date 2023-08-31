@@ -69,7 +69,13 @@ typedef struct {
 typedef struct {
     UcaNetMessageType type;
     gchar endpoint[128];
-} UcaNetMessageZmqEndpointRequest;
+    gint socket_type;
+} UcaNetMessageAddZmqEndpointRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gchar endpoint[128];
+} UcaNetMessageRemoveZmqEndpointRequest;
 
 typedef struct {
     UcaNetMessageType type;
