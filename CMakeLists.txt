@@ -35,7 +35,6 @@ endif ()
 
 if (ZMQ_FOUND AND JSON_GLIB_FOUND)
     option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
-    set(UCA_NET_ZMQ_DEFAULT_ENDPOINT "\"tcp://*:8990\"" CACHE STRING "zmq endpoint for sending data in form protocol://address")
 endif ()
 
 configure_file(
