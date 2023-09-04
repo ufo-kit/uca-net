@@ -36,7 +36,7 @@
 static GMainLoop *loop;
 static GMutex access_lock;
 static gboolean stop_streaming_requested = FALSE;
-static GTree *zmq_endpoints = NULL;
+static GHashTable *zmq_endpoints = NULL;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
 typedef void (*CameraFunc) (UcaCamera *camera, GError **error);
@@ -64,7 +64,7 @@ typedef struct {
     gsize header_size;
 } UcadZmqPayload;
 
-/* A node in a GTree holding endpoint: node pairs. This is the structure passed
+/* A node in a GHashTable holding endpoint: node pairs. This is the structure passed
  * to a thread in a GThreadPool. */
 typedef struct {
     gpointer socket;
@@ -226,15 +226,6 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 }
 
 /**
- * Convenience function needed by g_tree_new_full.
- */
-gint
-ucad_strcmp0_data (gconstpointer a, gconstpointer b, gpointer data)
-{
-    return g_strcmp0 ((const gchar *) a, (const gchar *) b);
-}
-
-/**
  * Create header, if buffer is NULL then create a special header signalling
  * end-of-stream, otherwise make the standard header to be sent along with the
  * image itself.
@@ -297,28 +288,17 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
 }
 
 /**
- * Convenience function to create a list from a tree which can be iterated over.
- */
-gboolean
-udad_zmq_endpoints_to_list (gpointer key, gpointer value, gpointer data)
-{
-    GList **list = (GList **) data;
-    *list = g_list_append(*list, value);
-
-    return FALSE;
-}
-
-/**
  * Push images to all queues, i.e. feed all the sending threads with data.
  */
 static void
-udad_zmq_push_to_all (GList *endpoints, UcadZmqPayload *payload)
+udad_zmq_push_to_all (UcadZmqPayload *payload)
 {
-    GList *ep_it = NULL;
+    GHashTableIter iter;
     UcadZmqNode *node;
 
-    for (ep_it = endpoints; ep_it != NULL; ep_it = ep_it->next) {
-        node = (UcadZmqNode *) ep_it->data;
+    g_hash_table_iter_init (&iter, zmq_endpoints);
+
+    while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &node)) {
         g_async_queue_push (node->data_queue, payload);
     }
 }
@@ -327,14 +307,15 @@ udad_zmq_push_to_all (GList *endpoints, UcadZmqPayload *payload)
  * Wait for all sockets (and threads) to finish sending one image, i.e. we pop all queues.
  */
 static gint
-udad_zmq_wait_for_all (GList *endpoints)
+udad_zmq_wait_for_all (void)
 {
-    GList *ep_it = NULL;
+    GHashTableIter iter;
     UcadZmqNode *node;
     gint zmq_retval_all = 0;
 
-    for (ep_it = endpoints; ep_it != NULL; ep_it = ep_it->next) {
-        node = (UcadZmqNode *) ep_it->data;
+    g_hash_table_iter_init (&iter, zmq_endpoints);
+
+    while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &node)) {
         g_async_queue_pop (node->feedback_queue);
 
         if (node->zmq_retval < 0) {
@@ -612,15 +593,15 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     gint num_sent = 0;
     guint pixel_size, width, height, bitdepth;
     gint zmq_retval = 0;
-    gint num_endpoints = g_tree_nnodes (zmq_endpoints);
+    guint num_endpoints = g_hash_table_size (zmq_endpoints);
     UcadZmqNode *node;
     gint64 i;
     UcadZmqPayload *payload;
-    GList *ep_list = NULL, *ep_it = NULL;
+    GHashTableIter iter;
     GThreadPool *pool = g_thread_pool_new (
             (GFunc) ucad_zmq_send_images,
             NULL,
-            num_endpoints,
+            (gint) num_endpoints,
             FALSE,
             &error
     );
@@ -640,11 +621,10 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         goto send_error_reply;
     }
 
-    g_tree_foreach (zmq_endpoints, udad_zmq_endpoints_to_list, &ep_list);
+    g_hash_table_iter_init (&iter, zmq_endpoints);
 
     /* Start threads */
-    for (ep_it = ep_list; ep_it != NULL; ep_it = ep_it->next) {
-        node = (UcadZmqNode *) ep_it->data;
+    while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &node)) {
         if (!g_thread_pool_push (pool, node, &error)) {
             goto send_error_reply;
         }
@@ -684,10 +664,10 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 
         /* Make new header, update data structures and send request */
         payload->header = ucad_zmq_create_image_header (payload->buffer, width, height, pixel_size, num_sent, &payload->header_size);
-        udad_zmq_push_to_all (ep_list, payload);
+        udad_zmq_push_to_all (payload);
 
         /* Get status from all senders */
-        zmq_retval = udad_zmq_wait_for_all (ep_list);
+        zmq_retval = udad_zmq_wait_for_all ();
         g_free (payload->header);
         if (zmq_retval < 0) {
             /* If even only one failed we stop sending, stop the threads without
@@ -703,8 +683,8 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             /* Send end of stream indicator and stop */
             payload->buffer_size = 0;
             payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, &payload->header_size);
-            udad_zmq_push_to_all (ep_list, payload);
-            zmq_retval = udad_zmq_wait_for_all (ep_list);
+            udad_zmq_push_to_all (payload);
+            zmq_retval = udad_zmq_wait_for_all ();
             g_free (payload->header);
             if (zmq_retval < 0) {
                 g_warning ("sending end of stream failed: %s\n", zmq_strerror (zmq_retval));
@@ -721,7 +701,6 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 send_error_reply:
     g_debug ("Pushed %d frames", num_sent);
     g_thread_pool_free (pool, FALSE, TRUE);
-    g_list_free (ep_list);
     g_free (payload->buffer);
     g_free (payload);
     prepare_error_reply (error, &reply.error);
@@ -747,11 +726,10 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
     GError *error = NULL;
 
     if (zmq_endpoints == NULL) {
-        /* zmq_endpoints = g_tree_new ((GCompareFunc) g_strcmp0); */
-        zmq_endpoints = g_tree_new_full (ucad_strcmp0_data, NULL, g_free, ucad_zmq_node_free);
+        zmq_endpoints = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, ucad_zmq_node_free);
     }
 
-    if (g_tree_lookup (zmq_endpoints, request->endpoint) == NULL) {
+    if (g_hash_table_lookup (zmq_endpoints, request->endpoint) == NULL) {
         g_debug ("Adding endpoint `%s'", request->endpoint);
         if (context == NULL) {
             if ((context = zmq_ctx_new ()) == NULL) {
@@ -763,7 +741,7 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
         if (!ucad_zmq_node_init (node, context, request->endpoint, request->socket_type, &error)) {
             goto send_error_reply;
         }
-        g_tree_insert (zmq_endpoints, g_strdup (request->endpoint), node);
+        g_hash_table_insert (zmq_endpoints, g_strdup (request->endpoint), node);
     } else {
         g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
                      "zmq endpoint already in list: %s\n", request->endpoint);
@@ -773,7 +751,7 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
 send_error_reply:
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
-    g_debug ("Current number of endpoints: %d", g_tree_nnodes (zmq_endpoints));
+    g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
 }
 
 static void
@@ -782,20 +760,20 @@ handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *ca
     UcaNetMessageRemoveZmqEndpointRequest *request = (UcaNetMessageRemoveZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT };
     GError *error = NULL;
-    UcadZmqNode *node = g_tree_lookup (zmq_endpoints, request->endpoint);
+    UcadZmqNode *node = g_hash_table_lookup (zmq_endpoints, request->endpoint);
 
     if (node == NULL) {
         g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
                      "zmq endpoint not in list: %s\n", request->endpoint);
         g_debug ("Endpoint `%s' not in list", request->endpoint);
     } else {
-        g_tree_remove (zmq_endpoints, request->endpoint);
+        g_hash_table_remove (zmq_endpoints, request->endpoint);
         g_debug ("Removed endpoint `%s'", request->endpoint);
     }
 
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
-    g_debug ("Current number of endpoints: %d", g_tree_nnodes (zmq_endpoints));
+    g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
 }
 
 static void
@@ -979,6 +957,9 @@ main (int argc, char **argv)
         g_printerr ("Error: %s\n", error->message);
 
     g_object_unref (camera);
+    if (zmq_endpoints != NULL) {
+        g_hash_table_destroy (zmq_endpoints);
+    }
 
 cleanup_manager:
     g_object_unref (manager);
