@@ -70,6 +70,7 @@ typedef struct {
     UcaNetMessageType type;
     gchar endpoint[128];
     gint socket_type;
+    gint sndhwm; /* High water mark for outbound messages (-1: do not set) */
 } UcaNetMessageAddZmqEndpointRequest;
 
 typedef struct {

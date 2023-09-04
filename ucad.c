@@ -332,33 +332,39 @@ udad_zmq_wait_for_all (void)
 
 #ifdef WITH_ZMQ_NETWORKING
 static gboolean
-ucad_zmq_node_init (UcadZmqNode *node, gpointer context, gchar *endpoint, gint socket_type, GError **error)
+ucad_zmq_node_init (UcadZmqNode *node, UcaNetMessageAddZmqEndpointRequest *request, gpointer context, GError **error)
 {
-    gint hwm = 1;
+    gint sndhwm = request->sndhwm;
     gsize size = sizeof (gint);
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
     node->socket = NULL;
 
-    if ((node->socket = zmq_socket (context, socket_type)) == NULL) {
+    if (sndhwm < 0 && request->socket_type == ZMQ_PUB) {
+        /* Live image needs to be the freshest, so do not queue at all */
+        sndhwm = 1;
+    }
+
+    if ((node->socket = zmq_socket (context, request->socket_type)) == NULL) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
                      "zmq socket creation failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
-    if (socket_type == ZMQ_PUB && zmq_setsockopt (node->socket, ZMQ_SNDHWM, &hwm, sizeof (gint)) != 0) {
+    if (sndhwm >= 0 && zmq_setsockopt (node->socket, ZMQ_SNDHWM, &sndhwm, sizeof (gint)) != 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
-                     "zmq setting HWM failed: %s\n", zmq_strerror (zmq_errno ()));
+                     "zmq setting SNDHWM failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
-    if (zmq_getsockopt (node->socket, ZMQ_SNDHWM, &hwm, &size) != 0) {
+    if (zmq_getsockopt (node->socket, ZMQ_SNDHWM, &sndhwm, &size) != 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_SOCKET_CREATION_FAILED,
-                     "zmq getting HWM failed: %s\n", zmq_strerror (zmq_errno ()));
+                     "zmq getting SNDHWM failed: %s\n", zmq_strerror (zmq_errno ()));
+        return FALSE;
     }
-    if (zmq_bind (node->socket, endpoint) != 0) {
+    if (zmq_bind (node->socket, request->endpoint) != 0) {
         g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_BIND_FAILED,
                      "zmq socket bind failed: %s\n", zmq_strerror (zmq_errno ()));
         return FALSE;
     }
-    g_debug ("Created socket `%s' of type=%d with SNDHWM=%d", endpoint, socket_type, hwm);
+    g_debug ("Created socket `%s' of type=%d with SNDHWM=%d", request->endpoint, request->socket_type, sndhwm);
 
     node->zmq_retval = 0;
     node->data_queue = g_async_queue_new ();
@@ -738,7 +744,7 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
                 goto send_error_reply;
             }
         }
-        if (!ucad_zmq_node_init (node, context, request->endpoint, request->socket_type, &error)) {
+        if (!ucad_zmq_node_init (node, request, context, &error)) {
             goto send_error_reply;
         }
         g_hash_table_insert (zmq_endpoints, g_strdup (request->endpoint), node);
