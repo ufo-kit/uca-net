@@ -17,7 +17,6 @@
 
 #include <glib-object.h>
 #include <gio/gio.h>
-#include <limits.h>
 #include <string.h>
 #include <signal.h>
 #include <uca/uca-camera.h>
@@ -232,10 +231,10 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
  * image itself.
  */
 static gchar *
-ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, gulong num_sent, gsize *length)
+ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length)
 {
-    if ((num_sent + 1) == (ULLONG_MAX + 1))  {
-        g_warning("Integer overflow detected for the variable %lu\n", num_sent);
+    if (num_sent == G_MAXUINT64)  {
+        g_warning("Integer overflow would occur for upcoming frame, num_sent:%lu\n", num_sent);
     }
     JsonBuilder *builder = NULL;
     JsonGenerator *generator = NULL;
@@ -245,7 +244,7 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
     gchar *timestamp;
 
     if (builder == NULL) {
-        builder = json_builder_new_immutable ();
+        builder = json_builder_new_immutable();
         generator = json_generator_new ();
     }
 
@@ -254,10 +253,10 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
 
     /* Frame number */
     if (buffer != NULL) {
+        gchar *frame_number = g_strdup_printf("%lu", num_sent);
         json_builder_set_member_name (builder, "frame-number");
-        ((num_sent + 1) == (ULLONG_MAX + 1))
-        ? json_builder_add_string_value(builder, g_strdup_printf("%lu", num_sent))
-        : json_builder_add_int_value (builder, num_sent);
+        json_builder_add_string_value(builder, frame_number);
+        g_free(frame_number);
         /* Timestamp */
         dt = g_date_time_new_now_local ();
         timestamp = g_strdup_printf ("%ld.%d", g_date_time_to_unix (dt), g_date_time_get_microsecond (dt));
@@ -600,7 +599,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #ifdef WITH_ZMQ_NETWORKING
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
-    gulong num_sent = 0;
+    guint64 num_sent = 0;
     guint pixel_size, width, height, bitdepth;
     gint zmq_retval = 0;
     guint num_endpoints = g_hash_table_size (zmq_endpoints);
