@@ -235,7 +235,7 @@ static gchar *
 ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length)
 {
     if ((num_sent + 1) == (ULLONG_MAX + 1))  {
-        g_warning("Integer overflow detected for the variable %ld\n", num_sent);
+        g_warning("Integer overflow detected for the variable %lu\n", num_sent);
     }
     JsonBuilder *builder = NULL;
     JsonGenerator *generator = NULL;
@@ -256,7 +256,7 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
     if (buffer != NULL) {
         json_builder_set_member_name (builder, "frame-number");
         ((num_sent + 1) == (ULLONG_MAX + 1))
-        ? json_builder_add_string_value(builder, g_strdup_printf("%ld", num_sent))
+        ? json_builder_add_string_value(builder, g_strdup_printf("%lu", num_sent))
         : json_builder_add_int_value (builder, num_sent);
         /* Timestamp */
         dt = g_date_time_new_now_local ();
@@ -709,7 +709,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #endif
 
 send_error_reply:
-    g_debug ("Pushed %ld frames", num_sent);
+    g_debug ("Pushed %lu frames", num_sent);
     g_thread_pool_free (pool, FALSE, TRUE);
     g_free (payload->buffer);
     g_free (payload);
