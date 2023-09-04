@@ -232,7 +232,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
  * image itself.
  */
 static gchar *
-ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length)
+ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, gulong num_sent, gsize *length)
 {
     if ((num_sent + 1) == (ULLONG_MAX + 1))  {
         g_warning("Integer overflow detected for the variable %lu\n", num_sent);
@@ -600,7 +600,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #ifdef WITH_ZMQ_NETWORKING
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
-    guint64 num_sent = 0;
+    gulong num_sent = 0;
     guint pixel_size, width, height, bitdepth;
     gint zmq_retval = 0;
     guint num_endpoints = g_hash_table_size (zmq_endpoints);
