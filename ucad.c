@@ -244,7 +244,7 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
     gchar *timestamp;
 
     if (builder == NULL) {
-        builder = json_builder_new_immutable();
+        builder = json_builder_new_immutable ();
         generator = json_generator_new ();
     }
 
