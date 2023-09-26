@@ -41,6 +41,7 @@ GQuark uca_net_camera_error_quark ()
 
 enum {
     PROP_HOST = N_BASE_PROPERTIES,
+    PROP_PORT,
     N_PROPERTIES
 };
 
@@ -304,7 +305,7 @@ request_set_property (GSocketConnection *connection, const gchar *name, const GV
 
     str = g_value_get_string (&str_value);
     strncpy (request.property_name, name, sizeof (request.property_name));
-    strncpy (request.property_value, str, sizeof (request.property_value));
+    strncpy (request.property_value, str == NULL ? "" : str, sizeof (request.property_value));
 
     if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, error))
         return FALSE;
@@ -434,9 +435,13 @@ uca_net_camera_get_property (GObject *object,
     priv = UCA_NET_CAMERA_GET_PRIVATE (object);
 
     /* handle net camera props */
-    if (property_id == PROP_HOST) {
-        g_value_set_string (value, priv->host);
-        return;
+    switch (property_id) {
+        case PROP_HOST:
+            g_value_set_string (value, priv->host);
+            return;
+        case PROP_PORT:
+            g_value_set_uint (value, UCA_NET_DEFAULT_PORT);
+            return;
     }
 
     if (priv->client == NULL) {
@@ -659,10 +664,17 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
 
     net_properties[PROP_HOST] =
         g_param_spec_string ("host",
-                             "Host name and optional port",
-                             "Host name and optional port",
+                             "Host name of ucad",
+                             "Host name of ucad",
                              "localhost",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT);
+
+    net_properties[PROP_PORT] =
+        g_param_spec_uint("port",
+            "Port of ucad",
+            "Port of ucad",
+            1, G_MAXUINT, UCA_NET_DEFAULT_PORT,
+            G_PARAM_READABLE);
 
     for (guint i = PROP_0 + 1; i < N_BASE_PROPERTIES; i++)
         g_object_class_override_property (oclass, i, uca_camera_props[i]);

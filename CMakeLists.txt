@@ -23,12 +23,18 @@ add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
 pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
 pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
+pkg_check_modules(ZMQ libzmq)
+pkg_check_modules(JSON_GLIB json-glib-1.0)
 pkg_check_variable(libuca plugindir)
 
 set(UCA_NET_DEFAULT_PORT 8989)
 
 if (UNIX)
     set(HAVE_UNIX 1)
+endif ()
+
+if (ZMQ_FOUND AND JSON_GLIB_FOUND)
+    option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
 endif ()
 
 configure_file(
@@ -39,11 +45,15 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${UCA_INCLUDE_DIRS}
-    ${GIO_INCLUDE_DIRS})
+    ${GIO_INCLUDE_DIRS}
+    ${ZMQ_INCLUDE_DIRS}
+    ${JSON_GLIB_INCLUDE_DIRS})
 
 link_directories(
     ${UCA_LIBRARY_DIRS}
-    ${GIO_LIBRARY_DIRS})
+    ${GIO_LIBRARY_DIRS}
+    ${ZMQ_LIBRARY_DIRS}
+    ${JSON_GLIB_LIBRARY_DIRS})
 
 # uca-net client camera
 add_library(ucanet SHARED uca-net-camera.c)
@@ -61,7 +71,9 @@ add_executable(ucad ucad.c)
 
 target_link_libraries(ucad
     ${UCA_LIBRARIES}
-    ${GIO_LIBRARIES})
+    ${GIO_LIBRARIES}
+    ${ZMQ_LIBRARIES}
+    ${JSON_GLIB_LIBRARIES})
 
 install(TARGETS ucad
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
