@@ -439,7 +439,7 @@ serve (UcaCamera *camera, guint16 port, GError **error)
     if (!g_socket_listener_add_inet_port (G_SOCKET_LISTENER (service), port, NULL, error))
         return;
 
-    g_signal_connect (service, "run", G_CALLBACK (run_callback), camera);
+    g_signal_connect (service, "incoming", G_CALLBACK (run_callback), camera);
 
     loop = g_main_loop_new (NULL, TRUE);
 
