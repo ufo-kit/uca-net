@@ -272,8 +272,8 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
         /* Image shape */
         json_builder_set_member_name (builder, "shape");
         json_builder_begin_array (builder);
-        json_builder_add_int_value (builder, (gint) width);
         json_builder_add_int_value (builder, (gint) height);
+        json_builder_add_int_value (builder, (gint) width);
         json_builder_end_array (builder);
     } else {
         json_builder_set_member_name (builder, "end");
