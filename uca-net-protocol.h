@@ -64,6 +64,7 @@ typedef struct {
 typedef struct {
     UcaNetMessageType type;
     gint64 num_frames;
+    gboolean end; /* Send poison pill at the end */
 } UcaNetMessagePushRequest;
 
 typedef struct {

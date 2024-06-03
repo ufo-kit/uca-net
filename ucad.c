@@ -36,6 +36,7 @@
 static GMainLoop *loop;
 static GMutex access_lock;
 static gboolean stop_streaming_requested = FALSE;
+guint64 num_sent = 0;
 static GHashTable *zmq_endpoints = NULL;
 
 typedef void (*MessageHandler) (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error);
@@ -231,7 +232,8 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
  * image itself.
  */
 static gchar *
-ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length)
+ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length,
+                              gboolean send_poison_pill)
 {
     if (num_sent == G_MAXUINT64)  {
         g_warning("Integer overflow would occur for upcoming frame, num_sent:%lu\n", num_sent);
@@ -242,6 +244,12 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
     gchar *header;
     GDateTime *dt;
     gchar *timestamp;
+
+    if (buffer == NULL && !send_poison_pill) {
+        /* Do not send poison pill, we don't need to generate any json structure */
+        *length = 0;
+        return NULL;
+    }
 
     if (builder == NULL) {
         builder = json_builder_new_immutable ();
@@ -415,15 +423,21 @@ ucad_zmq_send_images (UcadZmqNode *node, gpointer static_data)
 
     while (!stop) {
         payload = (UcadZmqPayload *) g_async_queue_pop (node->data_queue);
+        if (payload->header_size) {
 
-        /* First send the header and then the actual payload */
-        node->zmq_retval = zmq_send (node->socket, payload->header, payload->header_size, payload->buffer_size == 0 ? 0 : ZMQ_SNDMORE);
+            /* First send the header and then the actual payload */
+            node->zmq_retval = zmq_send (node->socket, payload->header, payload->header_size,
+                                         payload->buffer_size == 0 ? 0 : ZMQ_SNDMORE);
 
-        if (node->zmq_retval >= 0 && payload->buffer_size != 0) {
-            node->zmq_retval = zmq_send (node->socket, payload->buffer, payload->buffer_size, 0);
-        }
+            if (node->zmq_retval >= 0 && payload->buffer_size != 0) {
+                node->zmq_retval = zmq_send (node->socket, payload->buffer, payload->buffer_size, 0);
+            }
 
-        if (payload->buffer_size == 0 || node->zmq_retval < 0) {
+            if (payload->buffer_size == 0 || node->zmq_retval < 0) {
+                stop = TRUE;
+            }
+        } else {
+            node->zmq_retval = 0;
             stop = TRUE;
         }
 
@@ -595,16 +609,18 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 {
     GError *error = NULL;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
+    /* Clear flag if called when not streaming */
+    stop_streaming_requested = FALSE;
 
 #ifdef WITH_ZMQ_NETWORKING
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
-    guint64 num_sent = 0;
     guint pixel_size, width, height, bitdepth;
     gint zmq_retval = 0;
     guint num_endpoints = g_hash_table_size (zmq_endpoints);
     UcadZmqNode *node;
     gint64 i;
+    gboolean send_poison_pill;
     UcadZmqPayload *payload;
     GHashTableIter iter;
     GThreadPool *pool = g_thread_pool_new (
@@ -614,9 +630,6 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             FALSE,
             &error
     );
-    if (error != NULL) {
-        goto send_error_reply;
-    }
 
     payload = g_new (UcadZmqPayload, 1);
     payload->buffer = NULL;
@@ -624,7 +637,13 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
     payload->buffer_size = 0;
     payload->header_size = 0;
 
+    if (error != NULL) {
+        goto send_error_reply;
+    }
+
     request = (UcaNetMessagePushRequest *) message;
+
+    send_poison_pill = request->end;
 
     if (request->num_frames == 0) {
         goto send_error_reply;
@@ -664,6 +683,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         if (stop_streaming_requested) {
             /* Whatever number of images was sent, stop immediately */
             i = 0;
+            send_poison_pill = TRUE;
             stop_streaming_requested = FALSE;
             g_debug ("Stop stream upon request");
         }
@@ -672,7 +692,8 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
 
         /* Make new header, update data structures and send request */
-        payload->header = ucad_zmq_create_image_header (payload->buffer, width, height, pixel_size, num_sent, &payload->header_size);
+        payload->header = ucad_zmq_create_image_header (payload->buffer, width, height, pixel_size, num_sent,
+                                                        &payload->header_size, send_poison_pill);
         udad_zmq_push_to_all (payload);
 
         /* Get status from all senders */
@@ -691,7 +712,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         if (i == 0) {
             /* Send end of stream indicator and stop */
             payload->buffer_size = 0;
-            payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, &payload->header_size);
+            payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, &payload->header_size, send_poison_pill);
             udad_zmq_push_to_all (payload);
             zmq_retval = udad_zmq_wait_for_all ();
             g_free (payload->header);
@@ -708,7 +729,10 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #endif
 
 send_error_reply:
-    g_debug ("Pushed %lu frames", num_sent);
+    g_debug ("Pushed %lu frames, poison pill: %d", num_sent, send_poison_pill);
+    if (send_poison_pill) {
+        num_sent = 0;
+    }
     g_thread_pool_free (pool, FALSE, TRUE);
     g_free (payload->buffer);
     g_free (payload);
