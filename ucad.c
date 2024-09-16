@@ -810,6 +810,18 @@ handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *ca
 }
 
 static void
+handle_zmq_remove_all_endpoints_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
+{
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ALL_ENDPOINTS };
+
+    if (zmq_endpoints != NULL) {
+        g_hash_table_remove_all (zmq_endpoints);
+    }
+    send_reply (connection, &reply, sizeof (reply), stream_error);
+    g_debug ("All endpoints removed");
+}
+
+static void
 handle_write_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
     GInputStream *input;
@@ -868,6 +880,8 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
         { UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT, handle_zmq_add_endpoint_request },
         { UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT,
                                             handle_zmq_remove_endpoint_request },
+        { UCA_NET_MESSAGE_ZMQ_REMOVE_ALL_ENDPOINTS,
+                                            handle_zmq_remove_all_endpoints_request },
         { UCA_NET_MESSAGE_WRITE,            handle_write_request },
         { UCA_NET_MESSAGE_INVALID,          NULL }
     };
