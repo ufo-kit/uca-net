@@ -64,8 +64,6 @@ uca_net_{derived}_camera_get_property (GObject *object,
     UcaNetCamera *camera = UCA_NET_CAMERA (object);
     GError *error = NULL;
 
-    g_print ("Getting derived property %d\n", property_id);
-
     // Handle dynamic properties
     if (property_id >= N_BASE_PROPERTIES) {
         GSocketConnection *connection = uca_net_camera_get_remote_connection (UCA_NET_CAMERA (camera), &error);
@@ -169,7 +167,6 @@ read_property_reply (GObject *object, GInputStream *input, guint index, GError *
     pspec = deserialize_param_spec (&property);
 
     if (pspec != NULL){
-        g_print ("Installing derived property %s on object %p\n", property.name, object);
         g_object_class_install_property (G_OBJECT_GET_CLASS (object), N_BASE_PROPERTIES + index + 1, pspec);
     }
 }
@@ -185,7 +182,6 @@ read_get_properties_reply (GObject *object, GInputStream *input, GError **error)
 
         for (guint i = 0; i < reply.num_properties; i++){
             read_property_reply (object, input, i, error);
-            g_print ("derived Property number %d of %d\n", i, reply.num_properties);
         }
     }
 }
@@ -197,7 +193,6 @@ on_connection_ready(UcaNetCamera *camera, GSocketConnection *connection, UcaNet{
 
     // Now we can safely request and install properties
     if (send_default_message(connection, UCA_NET_MESSAGE_GET_PROPERTIES, &error)) {
-        g_print("Getting properties from camera\n");
         read_get_properties_reply(self, g_io_stream_get_input_stream(G_IO_STREAM(connection)), &error);
     } else {
         g_warning("Failed to send GET_PROPERTIES message: %s", error->message);
@@ -208,7 +203,6 @@ on_connection_ready(UcaNetCamera *camera, GSocketConnection *connection, UcaNet{
 static void
 uca_net_{derived}_camera_constructed (GObject *object)
 {
-    g_print("Constructing derived {derived} camera\n");
 
     // Connect to connection-ready signal
     g_signal_connect(object, "connection-ready",
@@ -220,7 +214,6 @@ uca_net_{derived}_camera_constructed (GObject *object)
 
 static void
 uca_net_{derived}_camera_dispose (GObject *object) {
-    g_print ("Disposing derived {derived} camera\n");
     
     // Only proceed if we have a valid object
     if (object == NULL)
@@ -242,7 +235,6 @@ uca_net_{derived}_camera_dispose (GObject *object) {
 static void
 uca_net_{derived}_camera_finalize (GObject *object)
 {
-    g_print ("Finalizing derived {derived} camera\n");
     G_OBJECT_CLASS (uca_net_{derived}_camera_parent_class)->finalize (object);
 }
 
@@ -252,7 +244,6 @@ uca_net_{derived}_camera_class_init (UcaNet{Derived}CameraClass *klass)
     GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
     UcaCameraClass *camera_class = UCA_CAMERA_CLASS (klass);
 
-    g_print ("Initializing derived {derived} camera class\n");
 
     // Set property handling functions
     gobject_class->set_property = uca_net_{derived}_camera_set_property;
@@ -274,7 +265,6 @@ uca_net_{derived}_camera_class_init (UcaNet{Derived}CameraClass *klass)
 static void
 uca_net_{derived}_camera_init (UcaNet{Derived}Camera *self)
 {
-    g_print ("Initializing derived {derived} camera\n");
     UcaNet{Derived}CameraPrivate *priv = uca_net_{derived}_camera_get_instance_private(self);
     priv->name = NULL;  // Initialize to NULL
 }

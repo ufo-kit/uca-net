@@ -68,13 +68,6 @@ shared_library('ucanet',
     install_dir: plugindir,
 )
 
-shared_library('ucanetderived',
-    sources: ['uca-net-camera.c', 'uca-net-derived-camera.c'],
-    dependencies: [uca_dep, gio_dep],
-    install: true,
-    install_dir: plugindir,
-)
-
 executable('ucad',
     sources: ['ucad.c'],
     dependencies: [uca_dep, gio_dep, json_dep, zmq_dep],

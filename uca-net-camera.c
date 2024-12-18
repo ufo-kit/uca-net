@@ -98,7 +98,6 @@ GSocketConnection *
 uca_net_camera_get_remote_connection (UcaNetCamera *camera, GError **error)
 {
     UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
-    // g_print ("Connecting to %s\n", priv->host);
     return g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, error);
 }
 
@@ -523,7 +522,6 @@ uca_net_camera_constructed (GObject *object)
     const gchar *env;
     env = g_getenv ("UCA_NET_HOST");
     priv->host = env != NULL ? g_strdup (env) : g_strdup ("localhost");
-    g_print ("Connecting to %s\n", priv->host);
 
     // Connect first
     GError *error = NULL;
@@ -601,7 +599,6 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
 static void
 uca_net_camera_init (UcaNetCamera *self)
 {
-    g_print ("Initializing net camera\n");
     UcaNetCameraPrivate *priv;
 
     self->priv = priv = UCA_NET_CAMERA_GET_PRIVATE (self);
