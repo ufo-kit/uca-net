@@ -1,0 +1,287 @@
+#include <stdlib.h>
+#include <gio/gio.h>
+#include <gmodule.h>
+#include <string.h>
+
+#include <uca/uca-camera.h>
+#include "uca-net-camera.h"
+#include "uca-net-protocol.h"
+#include "uca-net-{derived}-camera.h"
+
+// #include "config.h"
+
+#define MAX_NET_CAM_PROPERTIES 100
+
+#define UCA_NET_{DERIVED}_CAMERA_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), UCA_TYPE_NET_{DERIVED}_CAMERA, UcaNet{Derived}CameraPrivate))
+
+// Properties
+static GParamSpec *uca_net_{derived}_camera_properties[N_BASE_PROPERTIES + MAX_NET_CAM_PROPERTIES] = { NULL, };
+
+struct _UcaNet{Derived}CameraPrivate {
+    gchar *name;
+};
+
+// Fix the type definition to properly handle private data
+G_DEFINE_TYPE_WITH_PRIVATE(UcaNet{Derived}Camera, uca_net_{derived}_camera, UCA_TYPE_NET_CAMERA)
+
+// Implement set_property to handle dynamic properties
+static void
+uca_net_{derived}_camera_set_property (GObject *object,
+                                     guint property_id,
+                                     const GValue *value,
+                                     GParamSpec *pspec)
+{
+    UcaNetCamera *camera = UCA_NET_CAMERA (object);
+    GError *error = NULL;
+
+    // Handle dynamic properties
+    if (property_id >= N_BASE_PROPERTIES) {
+        GSocketConnection *connection = uca_net_camera_get_remote_connection (UCA_NET_CAMERA (camera), &error);
+        if (connection != NULL) {
+            const gchar *name = g_param_spec_get_name (pspec);
+
+            if (!uca_net_camera_set_remote_property (UCA_NET_CAMERA (camera), name, value, &error))
+                g_warning ("Could not set derived property: %s", error->message);
+
+            g_object_unref (connection);
+        } else {
+            g_warning ("Could not connect to socket: %s", error->message);
+            g_clear_error (&error);
+        }
+    } else {
+        // Chain up to parent class for base properties
+        G_OBJECT_CLASS (uca_net_{derived}_camera_parent_class)->set_property (object, property_id, value, pspec);
+    }
+}
+
+// Implement get_property to handle dynamic properties
+static void
+uca_net_{derived}_camera_get_property (GObject *object,
+                                     guint property_id,
+                                     GValue *value,
+                                     GParamSpec *pspec)
+{
+    UcaNetCamera *camera = UCA_NET_CAMERA (object);
+    GError *error = NULL;
+
+    g_print ("Getting derived property %d\n", property_id);
+
+    // Handle dynamic properties
+    if (property_id >= N_BASE_PROPERTIES) {
+        GSocketConnection *connection = uca_net_camera_get_remote_connection (UCA_NET_CAMERA (camera), &error);
+        if (connection != NULL) {
+            const gchar *name = g_param_spec_get_name (pspec);
+
+            if (!uca_net_camera_get_remote_property (UCA_NET_CAMERA (camera), name, value, &error))
+                g_warning ("Could not get property: %s", error->message);
+
+            g_object_unref (connection);
+        } else {
+            g_warning ("Could not connect to socket: %s", error->message);
+            g_clear_error (&error);
+        }
+    } else {
+        // Chain up to parent class for base properties
+        G_OBJECT_CLASS (uca_net_{derived}_camera_parent_class)->get_property (object, property_id, value, pspec);
+    }
+}
+
+static GParamSpec *
+deserialize_param_spec (UcaNetMessageProperty *prop)
+{
+#define CASE_NUMERIC(type, storage) \
+        case type: \
+            return g_param_spec_##storage (prop->name, prop->nick, prop->blurb, \
+                                           prop->spec.g##storage.minimum, prop->spec.g##storage.maximum, \
+                                           prop->spec.g##storage.default_value, \
+                                           prop->flags);
+    switch (prop->value_type) {
+        case G_TYPE_BOOLEAN:
+            return g_param_spec_boolean (prop->name, prop->nick, prop->blurb,
+                                         prop->spec.gboolean.default_value,
+                                         prop->flags);
+        case G_TYPE_STRING:
+            return g_param_spec_string (prop->name, prop->nick, prop->blurb,
+                                        prop->spec.gstring.default_value,
+                                        prop->flags);
+        case G_TYPE_ENUM:
+            {
+                /* Register a new enum type */
+                GType type;
+                GEnumValue *values;
+                gchar *type_name;
+
+                /* First check if type already exists */
+                type_name = g_strdup_printf ("%s-enum", prop->name);
+                type = g_type_from_name (type_name);
+
+                if (type == G_TYPE_INVALID) {
+                    /* Only register if it doesn't exist */
+                    values = g_new0 (GEnumValue, prop->spec.genum.n_values + 1);
+
+                    for (guint i = 0; i < prop->spec.genum.n_values; i++) {
+                        values[i].value = prop->spec.genum.values[i];
+                        values[i].value_name = g_strdup (prop->spec.genum.value_names[i]);
+                        values[i].value_nick = g_strdup (prop->spec.genum.value_nicks[i]);
+                    }
+
+                    type = g_enum_register_static (type_name, values);
+                }
+
+                g_free (type_name);
+
+                return g_param_spec_enum (prop->name, prop->nick, prop->blurb,
+                                        type, prop->spec.genum.default_value,
+                                        prop->flags);
+            }
+        CASE_NUMERIC (G_TYPE_INT, int)
+        CASE_NUMERIC (G_TYPE_INT64, int64)
+        CASE_NUMERIC (G_TYPE_UINT, uint)
+        CASE_NUMERIC (G_TYPE_UINT64, uint64)
+        CASE_NUMERIC (G_TYPE_FLOAT, float)
+        CASE_NUMERIC (G_TYPE_DOUBLE, double)
+        default:
+            g_warning ("Cannot deserialize property %s", prop->name);
+            return NULL;
+    }
+
+#undef CASE_NUMERIC
+}
+
+
+
+static void
+read_property_reply (GObject *object, GInputStream *input, guint index, GError **error)
+{
+    UcaNetMessageProperty property;
+    GParamSpec *pspec;
+
+    if (!g_input_stream_read_all (input, &property, sizeof (property), NULL, NULL, error)) {
+        g_warning ("Could not read all property data");
+        return;
+    }
+
+    if (!property.valid) {
+        g_warning ("Cannot install unserialized property `%s'", property.name);
+        return;
+    }
+
+    pspec = deserialize_param_spec (&property);
+
+    if (pspec != NULL){
+        g_print ("Installing derived property %s on object %p\n", property.name, object);
+        g_object_class_install_property (G_OBJECT_GET_CLASS (object), N_BASE_PROPERTIES + index + 1, pspec);
+    }
+}
+
+
+static void
+read_get_properties_reply (GObject *object, GInputStream *input, GError **error)
+{
+    UcaNetMessageGetPropertiesReply reply;
+
+    if (g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error)) {
+        g_warn_if_fail (reply.type == UCA_NET_MESSAGE_GET_PROPERTIES);
+
+        for (guint i = 0; i < reply.num_properties; i++){
+            read_property_reply (object, input, i, error);
+            g_print ("derived Property number %d of %d\n", i, reply.num_properties);
+        }
+    }
+}
+
+static void
+on_connection_ready(UcaNetCamera *camera, GSocketConnection *connection, UcaNet{Derived}Camera *self)
+{
+    GError *error = NULL;
+
+    // Now we can safely request and install properties
+    if (send_default_message(connection, UCA_NET_MESSAGE_GET_PROPERTIES, &error)) {
+        g_print("Getting properties from camera\n");
+        read_get_properties_reply(self, g_io_stream_get_input_stream(G_IO_STREAM(connection)), &error);
+    } else {
+        g_warning("Failed to send GET_PROPERTIES message: %s", error->message);
+        g_clear_error(&error);
+    }
+}
+
+static void
+uca_net_{derived}_camera_constructed (GObject *object)
+{
+    g_print("Constructing derived {derived} camera\n");
+
+    // Connect to connection-ready signal
+    g_signal_connect(object, "connection-ready",
+                    G_CALLBACK(on_connection_ready), object);
+
+    // Chain up
+    G_OBJECT_CLASS(uca_net_{derived}_camera_parent_class)->constructed(object);
+}
+
+static void
+uca_net_{derived}_camera_dispose (GObject *object) {
+    g_print ("Disposing derived {derived} camera\n");
+    
+    // Only proceed if we have a valid object
+    if (object == NULL)
+        return;
+
+    UcaNet{Derived}Camera *camera = UCA_NET_{DERIVED}_CAMERA(object);
+    if (camera == NULL)
+        return;
+
+    UcaNet{Derived}CameraPrivate *priv = uca_net_{derived}_camera_get_instance_private(camera);
+    if (priv != NULL && priv->name != NULL) {
+        g_clear_pointer(&priv->name, g_free);
+    }
+
+    // Chain up last
+    G_OBJECT_CLASS(uca_net_{derived}_camera_parent_class)->dispose(object);
+}
+
+static void
+uca_net_{derived}_camera_finalize (GObject *object)
+{
+    g_print ("Finalizing derived {derived} camera\n");
+    G_OBJECT_CLASS (uca_net_{derived}_camera_parent_class)->finalize (object);
+}
+
+static void
+uca_net_{derived}_camera_class_init (UcaNet{Derived}CameraClass *klass)
+{
+    GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+    UcaCameraClass *camera_class = UCA_CAMERA_CLASS (klass);
+
+    g_print ("Initializing derived {derived} camera class\n");
+
+    // Set property handling functions
+    gobject_class->set_property = uca_net_{derived}_camera_set_property;
+    gobject_class->get_property = uca_net_{derived}_camera_get_property;
+    gobject_class->constructed = uca_net_{derived}_camera_constructed;
+    gobject_class->dispose = uca_net_{derived}_camera_dispose;
+    gobject_class->finalize = uca_net_{derived}_camera_finalize;
+
+    // Inherit parent class methods
+    camera_class->start_recording = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->start_recording;
+    camera_class->stop_recording = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->stop_recording;
+    camera_class->start_readout = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->start_readout;
+    camera_class->stop_readout = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->stop_readout;
+    camera_class->write = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->write;
+    camera_class->grab = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->grab;
+    camera_class->trigger = UCA_CAMERA_CLASS(g_type_class_peek_parent(klass))->trigger;
+}
+
+static void
+uca_net_{derived}_camera_init (UcaNet{Derived}Camera *self)
+{
+    g_print ("Initializing derived {derived} camera\n");
+    UcaNet{Derived}CameraPrivate *priv = uca_net_{derived}_camera_get_instance_private(self);
+    priv->name = NULL;  // Initialize to NULL
+}
+
+/* Add this at the bottom of the file */
+G_MODULE_EXPORT GType
+camera_plugin_get_type (void)
+{
+    return UCA_TYPE_NET_{DERIVED}_CAMERA;
+}
