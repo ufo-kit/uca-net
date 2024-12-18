@@ -10,12 +10,7 @@
 
 // #include "config.h"
 
-#define MAX_NET_CAM_PROPERTIES 100
-
 #define UCA_NET_{DERIVED}_CAMERA_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj), UCA_TYPE_NET_{DERIVED}_CAMERA, UcaNet{Derived}CameraPrivate))
-
-// Properties
-static GParamSpec *uca_net_{derived}_camera_properties[N_BASE_PROPERTIES + MAX_NET_CAM_PROPERTIES] = { NULL, };
 
 struct _UcaNet{Derived}CameraPrivate {
     gchar *name;
