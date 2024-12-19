@@ -14,8 +14,12 @@ if zmq_dep.found() and json_dep.found()
   config.set('WITH_ZMQ_NETWORKING', true)
 endif
 
+min_derived_classes = get_option('min_derived_net_cameras')
+
+config.set('UCA_NET_MIN_DERIVED_CAMERAS', min_derived_classes)
+config.set_quoted('UCA_NET_PLUGIN_DIR', plugindir)
+
 python = find_program('python3')
-fs = import('fs')
 
 ### Generate source files from template
 # Find all .so files in the directory
@@ -32,6 +36,21 @@ foreach file : so_files
         message('Found ' + name)
     endif
 endforeach
+
+additional_classes = (min_derived_classes > names.length()) ? (min_derived_classes - names.length()) : 0
+
+if additional_classes > 0
+    message('Generating @0@ additional classes'.format(additional_classes))
+  
+    # Generate additional class names
+    additional_names = []
+    foreach i : range(additional_classes)
+        additional_names += '@0@'.format(i)
+    endforeach
+
+    # Append them to the original list
+    names += additional_names
+endif
 
 # Generate source files from template
 generated_sources = []
@@ -53,7 +72,6 @@ foreach name : names
     
     run_command(python, generator, input_source_abs, output_source_abs, name,
         check: false)
-
 endforeach
 
 configure_file(
