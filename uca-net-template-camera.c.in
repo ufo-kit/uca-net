@@ -188,7 +188,7 @@ on_connection_ready(UcaNetCamera *camera, GSocketConnection *connection, UcaNet{
 
     // Now we can safely request and install properties
     if (send_default_message(connection, UCA_NET_MESSAGE_GET_PROPERTIES, &error)) {
-        read_get_properties_reply(self, g_io_stream_get_input_stream(G_IO_STREAM(connection)), &error);
+        read_get_properties_reply(G_OBJECT(self), g_io_stream_get_input_stream(G_IO_STREAM(connection)), &error);
     } else {
         g_warning("Failed to send GET_PROPERTIES message: %s", error->message);
         g_clear_error(&error);
