@@ -48,8 +48,8 @@ typedef struct {
 
 typedef struct {
     UcaNetMessageType type;
-    gchar property_value[128];
-} UcaNetMessageGetPropertyReply;
+    gsize size;
+} UcaNetMessageGetPropertyReply; // Actual data sent similar to grab request
 
 typedef struct {
     UcaNetMessageType type;

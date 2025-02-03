@@ -24,6 +24,8 @@
 #include "uca-net-protocol.h"
 #include "config.h"
 
+#define WITH_ZMQ_NETWORKING
+
 #ifdef HAVE_UNIX
 #include <glib-unix.h>
 #endif
@@ -129,9 +131,11 @@ send_reply (GSocketConnection *connection, gpointer data, gsize size, GError **e
 
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
 
-    if (!g_output_stream_write_all (output, data, size, NULL, NULL, error))
+    gsize bytes_written;
+    if (!g_output_stream_write_all (output, data, size, &bytes_written, NULL, error))
         return;
-
+    if (bytes_written != size)
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "Could not write all data");
     if (!g_output_stream_flush (output, NULL, error))
         return;
 }
@@ -489,13 +493,33 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
     g_object_get_property (G_OBJECT (camera), request->property_name, &prop_value);
 
+
     g_value_init (&str_value, G_TYPE_STRING);
     g_value_transform (&prop_value, &str_value);
 
+    const gchar *str = g_value_get_string (&str_value);
+
     reply.type = request->type;
-    strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
+    reply.size = strlen (str) + 1; // +1 for the null terminator
+    // Send the property name and size
     send_reply (connection, &reply, sizeof (reply), error);
-    g_debug ("Getting `%s'=`%s'", request->property_name, reply.property_value);
+    g_debug  ("Getting `%s'= `%s'\n", request->property_name, str);
+
+    // Send the actual property value
+    GError *stream_error = NULL;
+    GOutputStream *output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
+    gsize bytes_written = 0;
+    while (bytes_written < reply.size) {
+        gssize written = g_output_stream_write (output, &str[bytes_written], reply.size - bytes_written, NULL, &stream_error);
+
+        if (written < 0){
+            break;
+        }
+        if (written == 0){
+            break;
+        }
+        bytes_written += written;
+    }
     g_value_unset (&str_value);
 }
 
@@ -890,8 +914,8 @@ run_callback (GSocketService *service, GSocketConnection *connection, GObject *s
     buffer = g_malloc0 (4096);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
 
-    /* looks dangerous */
     g_input_stream_read (input, buffer, 4096, NULL, &error);
+
     message = (UcaNetMessageDefault *) buffer;
 
 #if (GLIB_CHECK_VERSION (2, 36, 0))

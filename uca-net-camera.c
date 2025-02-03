@@ -143,9 +143,7 @@ uca_net_camera_start_recording (UcaCamera *camera,
     g_return_if_fail (UCA_IS_NET_CAMERA (camera));
 
     priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
-    if (!priv->size) {
-        uca_net_camera_determine_size (camera);
-    }
+    uca_net_camera_determine_size (camera);
     request_call (priv, UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
@@ -235,7 +233,6 @@ uca_net_camera_grab (UcaCamera *camera,
     if (!priv->size) {
         uca_net_camera_determine_size (camera);
     }
-
     connection = connect_socket (priv, error);
     g_return_val_if_fail (connection != NULL, FALSE);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
@@ -370,19 +367,43 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
     if (!g_output_stream_write_all (output, &request, sizeof (request), NULL, NULL, error))
         return FALSE;
 
-    /* reply */
+    // First receive size of the reply
     if (!g_input_stream_read_all (input, &reply, sizeof (reply), NULL, NULL, error))
         return FALSE;
 
+    // Then receive the actual data
+    if (reply.size <= 0) {
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid size of %d", reply.size);
+        return FALSE;
+    }
+
+    gchar *buffer = g_malloc0 (reply.size);
+    if (buffer == NULL) {
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Could not allocate buffer of size %d", reply.size);
+        return FALSE;
+    }
+    gsize bytes_left = reply.size;
+
+    while (bytes_left > 0) {
+        gssize read;
+
+        read = g_input_stream_read (input, &buffer[reply.size - bytes_left], bytes_left, NULL, error);
+
+        if (read < 0) {
+            g_free (buffer);
+            return FALSE;
+        }
+
+        bytes_left -= read;
+    }
+
     if (reply.type != request.type) {
-        if (error != NULL)
-            /* FIXME: replace with correct error codes */
-            *error = g_error_new_literal (G_FILE_ERROR, G_FILE_ERROR_NOENT, "Reply does not match request");
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, "Invalid reply type %d", reply.type);
         return FALSE;
     }
 
     if (g_type_is_a (G_VALUE_TYPE (value), G_TYPE_ENUM)) {
-        g_value_set_enum (value, atoi (reply.property_value));
+        g_value_set_enum (value, atoi (buffer));
     }
     else {
         /* XXX: I'd like to avoid this and rather use g_value_transform(), however
@@ -390,28 +411,28 @@ request_get_property (GSocketConnection *connection, const gchar *name, GValue *
          * uca-grab ... */
         switch (G_VALUE_TYPE (value)) {
             case G_TYPE_INT:
-                g_value_set_int (value, atol (reply.property_value));
+                g_value_set_int (value, atol (buffer));
                 break;
             case G_TYPE_INT64:
-                g_value_set_int (value, atol (reply.property_value));
+                g_value_set_int (value, atol (buffer));
                 break;
             case G_TYPE_UINT:
-                g_value_set_uint (value, atol (reply.property_value));
+                g_value_set_uint (value, atol (buffer));
                 break;
             case G_TYPE_UINT64:
-                g_value_set_uint (value, atol (reply.property_value));
+                g_value_set_uint (value, atol (buffer));
                 break;
             case G_TYPE_FLOAT:
-                g_value_set_float (value, atof (reply.property_value));
+                g_value_set_float (value, atof (buffer));
                 break;
             case G_TYPE_DOUBLE:
-                g_value_set_double (value, atof (reply.property_value));
+                g_value_set_double (value, atof (buffer));
                 break;
             case G_TYPE_BOOLEAN:
-                g_value_set_boolean (value, g_strcmp0 (reply.property_value, "TRUE") == 0);
+                g_value_set_boolean (value, g_strcmp0 (buffer, "TRUE") == 0);
                 break;
             case G_TYPE_STRING:
-                g_value_set_string (value, reply.property_value);
+                g_value_set_string (value, buffer);
                 break;
             default:
                 g_warning ("Unsupported property type %s", G_VALUE_TYPE_NAME (value));
