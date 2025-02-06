@@ -74,6 +74,23 @@ typedef struct {
     GAsyncQueue *feedback_queue;
 } UcadZmqNode;
 
+/* Here we hold if we want the receiver that the frames should be mirrored and/or rotated.
+ * This is an example implementation in python
+ *
+ * def _convert_image(image, mirror: bool, rotate: int):
+ *    if mirror:
+ *       image = np.fliplr(image)
+ *    if rotate:
+ *       image = np.rot90(image, k=rotate)
+ *    return image
+ *
+ * */
+gboolean mirror_value = FALSE;
+guint rotate_value = 0;
+GParamSpec* mirror;
+GParamSpec* rotate;
+
+
 #define UCAD_ERROR (ucad_error_quark ())
 
 GQuark ucad_error_quark()
@@ -283,6 +300,13 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
         json_builder_add_int_value (builder, (gint) height);
         json_builder_add_int_value (builder, (gint) width);
         json_builder_end_array (builder);
+
+        // Image transformations that the receiver should apply
+        json_builder_set_member_name (builder, "mirror");
+        json_builder_add_boolean_value(builder, mirror_value);
+        json_builder_set_member_name (builder, "rotate");
+        json_builder_add_int_value(builder, rotate_value);
+
     } else {
         json_builder_set_member_name (builder, "end");
         json_builder_add_boolean_value (builder, TRUE);
@@ -457,7 +481,7 @@ handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera,
     guint num_properties;
 
     pspecs = g_object_class_list_properties (G_OBJECT_GET_CLASS (camera), &num_properties);
-    reply.num_properties = num_properties - N_BASE_PROPERTIES + 1;
+    reply.num_properties = num_properties - N_BASE_PROPERTIES + 1 + 2;
 
     send_reply (connection, &reply, sizeof (reply), error);
 
@@ -467,6 +491,15 @@ handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera,
         serialize_param_spec (pspecs[i], &property);
         send_reply (connection, &property, sizeof (property), error);
     }
+    UcaNetMessageProperty property;
+
+    serialize_param_spec (mirror, &property);
+    property.value_type = G_TYPE_BOOLEAN;
+    send_reply (connection, &property, sizeof (property), error);
+
+    serialize_param_spec (rotate, &property);
+    property.value_type = G_TYPE_UINT;
+    send_reply (connection, &property, sizeof (property), error);
 
     g_free (pspecs);
 }
@@ -481,6 +514,28 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
     GValue str_value = {0};
 
     request = (UcaNetMessageGetPropertyRequest *) message;
+
+    if (g_strcasecmp(request->property_name, "mirror") == 0) {
+        reply.type = request->type;
+        g_value_init(&prop_value, g_type_is_a(G_TYPE_BOOLEAN, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_BOOLEAN);
+        g_value_init(&str_value, G_TYPE_STRING);
+        g_value_set_boolean(&prop_value, mirror_value);
+        g_value_transform(&prop_value, &str_value);
+        strncpy(reply.property_value, g_value_get_string(&str_value), sizeof (reply.property_value));
+        send_reply(connection, &reply, sizeof (reply), error);
+        return;
+    }
+    if (g_strcasecmp(request->property_name, "rotate") == 0) {
+        reply.type = request->type;
+        g_value_init(&prop_value, g_type_is_a(G_TYPE_UINT, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_UINT);
+        g_value_init (&str_value, G_TYPE_STRING);
+        g_value_set_uint(&prop_value, rotate_value);
+        g_value_transform (&prop_value, &str_value);
+        strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
+        send_reply (connection, &reply, sizeof (reply), error);
+        return;
+    }
+
     pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     if (pspec == NULL)
@@ -491,7 +546,6 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
 
     g_value_init (&str_value, G_TYPE_STRING);
     g_value_transform (&prop_value, &str_value);
-
     reply.type = request->type;
     strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
     send_reply (connection, &reply, sizeof (reply), error);
@@ -500,7 +554,7 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
 }
 
 static void
-handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error) 
+handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **error)
 {
     UcaNetMessageSetPropertyRequest *request;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_SET_PROPERTY };
@@ -509,6 +563,29 @@ handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, g
     GValue str_value = {0};
 
     request = (UcaNetMessageSetPropertyRequest *) message;
+
+    if (g_strcasecmp(request->property_name, "mirror") == 0) {
+        g_value_init (&prop_value, g_type_is_a (G_TYPE_BOOLEAN, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_BOOLEAN);
+        g_value_init (&str_value, G_TYPE_STRING);
+        g_value_set_string (&str_value, request->property_value);
+        g_value_transform (&str_value, &prop_value);
+        mirror_value = g_value_get_boolean(&prop_value);
+        send_reply (connection, &reply, sizeof (reply), error);
+
+        return;
+    }
+
+    if (g_strcasecmp(request->property_name, "rotate") == 0) {
+        g_value_init (&prop_value, g_type_is_a (G_TYPE_UINT, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_UINT);
+        g_value_init (&str_value, G_TYPE_STRING);
+        g_value_set_string (&str_value, request->property_value);
+        g_value_transform (&str_value, &prop_value);
+        rotate_value = g_value_get_uint(&prop_value);
+        send_reply (connection, &reply, sizeof (reply), error);
+
+        return;
+    }
+
     pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
@@ -980,6 +1057,20 @@ main (int argc, char **argv)
         g_print ("%s\n", g_option_context_get_help (context, TRUE, NULL));
         goto cleanup_manager;
     }
+
+    mirror = g_param_spec_boolean("mirror",
+                                  "mirror",
+                                  "Tells receiver if frames should be mirrored.",
+                                  TRUE,
+                                  G_PARAM_READWRITE);
+
+    rotate = g_param_spec_uint("rotate",
+                               "rotate",
+                               "Tell receiver if frames should be rotated.",
+                               (0),
+                               (3),
+                               (0),
+                               G_PARAM_READWRITE);
 
     camera = uca_plugin_manager_get_camera (manager, argv[argc - 1], &error, NULL);
 
