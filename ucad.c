@@ -85,10 +85,6 @@ typedef struct {
  *    return image
  *
  * */
-gboolean mirror_value = FALSE;
-guint rotate_value = 0;
-GParamSpec* mirror;
-GParamSpec* rotate;
 
 
 #define UCAD_ERROR (ucad_error_quark ())
@@ -249,7 +245,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
  * image itself.
  */
 static gchar *
-ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, guint64 num_sent, gsize *length,
+ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, gboolean mirror, guint rotate, guint64 num_sent, gsize *length,
                               gboolean send_poison_pill)
 {
     if (num_sent == G_MAXUINT64)  {
@@ -303,9 +299,9 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
 
         // Image transformations that the receiver should apply
         json_builder_set_member_name (builder, "mirror");
-        json_builder_add_boolean_value(builder, mirror_value);
+        json_builder_add_boolean_value(builder, mirror);
         json_builder_set_member_name (builder, "rotate");
-        json_builder_add_int_value(builder, rotate_value);
+        json_builder_add_int_value(builder, rotate);
 
     } else {
         json_builder_set_member_name (builder, "end");
@@ -481,7 +477,7 @@ handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera,
     guint num_properties;
 
     pspecs = g_object_class_list_properties (G_OBJECT_GET_CLASS (camera), &num_properties);
-    reply.num_properties = num_properties - N_BASE_PROPERTIES + 1 + 2;
+    reply.num_properties = num_properties - N_BASE_PROPERTIES + 1;
 
     send_reply (connection, &reply, sizeof (reply), error);
 
@@ -491,15 +487,6 @@ handle_get_properties_request (GSocketConnection *connection, UcaCamera *camera,
         serialize_param_spec (pspecs[i], &property);
         send_reply (connection, &property, sizeof (property), error);
     }
-    UcaNetMessageProperty property;
-
-    serialize_param_spec (mirror, &property);
-    property.value_type = G_TYPE_BOOLEAN;
-    send_reply (connection, &property, sizeof (property), error);
-
-    serialize_param_spec (rotate, &property);
-    property.value_type = G_TYPE_UINT;
-    send_reply (connection, &property, sizeof (property), error);
 
     g_free (pspecs);
 }
@@ -514,28 +501,6 @@ handle_get_property_request (GSocketConnection *connection, UcaCamera *camera, g
     GValue str_value = {0};
 
     request = (UcaNetMessageGetPropertyRequest *) message;
-
-    if (g_strcasecmp(request->property_name, "mirror") == 0) {
-        reply.type = request->type;
-        g_value_init(&prop_value, g_type_is_a(G_TYPE_BOOLEAN, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_BOOLEAN);
-        g_value_init(&str_value, G_TYPE_STRING);
-        g_value_set_boolean(&prop_value, mirror_value);
-        g_value_transform(&prop_value, &str_value);
-        strncpy(reply.property_value, g_value_get_string(&str_value), sizeof (reply.property_value));
-        send_reply(connection, &reply, sizeof (reply), error);
-        return;
-    }
-    if (g_strcasecmp(request->property_name, "rotate") == 0) {
-        reply.type = request->type;
-        g_value_init(&prop_value, g_type_is_a(G_TYPE_UINT, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_UINT);
-        g_value_init (&str_value, G_TYPE_STRING);
-        g_value_set_uint(&prop_value, rotate_value);
-        g_value_transform (&prop_value, &str_value);
-        strncpy (reply.property_value, g_value_get_string (&str_value), sizeof (reply.property_value));
-        send_reply (connection, &reply, sizeof (reply), error);
-        return;
-    }
-
     pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     if (pspec == NULL)
@@ -563,29 +528,6 @@ handle_set_property_request (GSocketConnection *connection, UcaCamera *camera, g
     GValue str_value = {0};
 
     request = (UcaNetMessageSetPropertyRequest *) message;
-
-    if (g_strcasecmp(request->property_name, "mirror") == 0) {
-        g_value_init (&prop_value, g_type_is_a (G_TYPE_BOOLEAN, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_BOOLEAN);
-        g_value_init (&str_value, G_TYPE_STRING);
-        g_value_set_string (&str_value, request->property_value);
-        g_value_transform (&str_value, &prop_value);
-        mirror_value = g_value_get_boolean(&prop_value);
-        send_reply (connection, &reply, sizeof (reply), error);
-
-        return;
-    }
-
-    if (g_strcasecmp(request->property_name, "rotate") == 0) {
-        g_value_init (&prop_value, g_type_is_a (G_TYPE_UINT, G_TYPE_ENUM) ? G_TYPE_INT : G_TYPE_UINT);
-        g_value_init (&str_value, G_TYPE_STRING);
-        g_value_set_string (&str_value, request->property_value);
-        g_value_transform (&str_value, &prop_value);
-        rotate_value = g_value_get_uint(&prop_value);
-        send_reply (connection, &reply, sizeof (reply), error);
-
-        return;
-    }
-
     pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (camera), request->property_name);
 
     g_value_init (&prop_value, g_type_is_a (pspec->value_type, G_TYPE_ENUM) ? G_TYPE_INT : pspec->value_type);
@@ -692,7 +634,8 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 #ifdef WITH_ZMQ_NETWORKING
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
-    guint pixel_size, width, height, bitdepth;
+    guint pixel_size, width, height, bitdepth, rotate;
+    gboolean mirror;
     gint zmq_retval = 0;
     guint num_endpoints = g_hash_table_size (zmq_endpoints);
     UcadZmqNode *node;
@@ -735,7 +678,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
     }
 
-    g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, NULL);
+    g_object_get (camera, "roi-width", &width, "roi-height", &height, "sensor-bitdepth", &bitdepth, "mirror", &mirror, "rotate", &rotate, NULL);
     pixel_size = bitdepth <= 8 ? 1 : 2;
     current_frame_size = width * height * pixel_size;
     g_debug ("Push request for %ld frames of size (%u x %u) and %u bytes per pixel",
@@ -769,7 +712,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
 
         /* Make new header, update data structures and send request */
-        payload->header = ucad_zmq_create_image_header (payload->buffer, width, height, pixel_size, num_sent,
+        payload->header = ucad_zmq_create_image_header (payload->buffer, width, height, pixel_size, mirror, rotate, num_sent,
                                                         &payload->header_size, send_poison_pill);
         udad_zmq_push_to_all (payload);
 
@@ -789,7 +732,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         if (i == 0) {
             /* Send end of stream indicator and stop */
             payload->buffer_size = 0;
-            payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, &payload->header_size, send_poison_pill);
+            payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, 0,0, &payload->header_size, send_poison_pill);
             udad_zmq_push_to_all (payload);
             zmq_retval = udad_zmq_wait_for_all ();
             g_free (payload->header);
@@ -1057,20 +1000,6 @@ main (int argc, char **argv)
         g_print ("%s\n", g_option_context_get_help (context, TRUE, NULL));
         goto cleanup_manager;
     }
-
-    mirror = g_param_spec_boolean("mirror",
-                                  "mirror",
-                                  "Tells receiver if frames should be mirrored.",
-                                  TRUE,
-                                  G_PARAM_READWRITE);
-
-    rotate = g_param_spec_uint("rotate",
-                               "rotate",
-                               "Tell receiver if frames should be rotated.",
-                               (0),
-                               (3),
-                               (0),
-                               G_PARAM_READWRITE);
 
     camera = uca_plugin_manager_get_camera (manager, argv[argc - 1], &error, NULL);
 
