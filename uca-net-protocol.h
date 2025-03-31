@@ -17,6 +17,11 @@ typedef enum {
     UCA_NET_MESSAGE_STOP_READOUT,
     UCA_NET_MESSAGE_TRIGGER,
     UCA_NET_MESSAGE_GRAB,
+    UCA_NET_MESSAGE_PUSH,
+    UCA_NET_MESSAGE_STOP_PUSH,
+    UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT,
+    UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT,
+    UCA_NET_MESSAGE_ZMQ_REMOVE_ALL_ENDPOINTS,
     UCA_NET_MESSAGE_WRITE,
 } UcaNetMessageType;
 
@@ -56,6 +61,24 @@ typedef struct {
     UcaNetMessageType type;
     gsize size;
 } UcaNetMessageGrabRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gint64 num_frames;
+    gboolean end; /* Send poison pill at the end */
+} UcaNetMessagePushRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gchar endpoint[128];
+    gint socket_type;
+    gint sndhwm; /* High water mark for outbound messages (-1: do not set) */
+} UcaNetMessageAddZmqEndpointRequest;
+
+typedef struct {
+    UcaNetMessageType type;
+    gchar endpoint[128];
+} UcaNetMessageRemoveZmqEndpointRequest;
 
 typedef struct {
     UcaNetMessageType type;

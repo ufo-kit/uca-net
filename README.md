@@ -34,3 +34,16 @@ with camera.recording():
 
 Besides using the `host` property one can also set the `UCA_NET_HOST`
 environment variable to set the host and port of the remote `ucad` service.
+
+`ucad` adds the properties *mirror* and *rotate* to the camera properties. 
+These propterties are only added to the metadata of the frames to tell the receiver if the frames should be rotated and or mirrored.
+This is an example implementation for the receiver in python:
+
+```python
+def convert_image(image, mirror: bool, rotate: int):
+   if mirror:
+      image = np.fliplr(image)
+   if rotate:
+      image = np.rot90(image, k=rotate)
+   return image
+```
