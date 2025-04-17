@@ -1,0 +1,8 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#mesondefine HAVE_UNIX
+#mesondefine UCA_NET_DEFAULT_PORT
+#mesondefine UCA_NET_NUM_DERIVED_CAMERAS
+
+#endif /* CONFIG_H */

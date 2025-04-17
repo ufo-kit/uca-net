@@ -21,6 +21,7 @@
 #include <glib-object.h>
 #include <uca/uca-camera.h>
 #include "uca-net-protocol.h"
+#include "config.h"
 
 G_BEGIN_DECLS
 

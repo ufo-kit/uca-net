@@ -16,14 +16,11 @@ def generate_from_template(template_file, output_file, name):
     content = template
     for pattern, replacement in replacements.items():
         content = content.replace(pattern, replacement)
-    
-    print (output_file)
+        
     with open(output_file, 'w') as f:
         f.write(content)
 
 if __name__ == '__main__':
-    sys.stderr.write("yo\n")
-    
     template_file = sys.argv[1]
     output_file = sys.argv[2]
     name = sys.argv[3]

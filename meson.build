@@ -7,8 +7,9 @@ json_dep = dependency('json-glib-1.0', version: '>=1.1.0', required: false)
 
 plugindir = uca_dep.get_pkgconfig_variable('plugindir')
 
+num_derived_classes = get_option('num_derived_net_cameras')
+
 config = configuration_data()
-config.set('UCA_NET_DEFAULT_PORT', get_option('default_port'))
 config.set('HAVE_UNIX', host_machine.system() != 'windows')
 if zmq_dep.found() and json_dep.found()
   config.set('WITH_ZMQ_NETWORKING', true)
@@ -18,42 +19,18 @@ min_derived_classes = get_option('min_derived_net_cameras')
 
 config.set('UCA_NET_MIN_DERIVED_CAMERAS', min_derived_classes)
 config.set_quoted('UCA_NET_PLUGIN_DIR', plugindir)
+config.set('UCA_NET_DEFAULT_PORT', get_option('default_port'))
+config.set('UCA_NET_NUM_DERIVED_CAMERAS', num_derived_classes)
 
 python = find_program('python3')
+generator = files('generate.py')
 
-### Generate source files from template
-# Find all .so files in the directory
-so_files = run_command('sh', '-c', 
-    'cd ' + plugindir + ' && ls libuca*.so', 
-    check: true).stdout().strip().split('\n')
-
-# Extract names from libuca*.so
 names = []
-foreach file : so_files
-    if file.startswith('libuca') and file.endswith('.so') and 'net' not in file
-        name = file.split('libuca')[1].split('.so')[0]
-        names += [name]
-        message('Found ' + name)
-    endif
+foreach i : range(num_derived_classes)
+    names += ['@0@'.format(i)]
 endforeach
 
-additional_classes = (min_derived_classes > names.length()) ? (min_derived_classes - names.length()) : 0
-
-if additional_classes > 0
-    message('Generating @0@ additional classes'.format(additional_classes))
-  
-    # Generate additional class names
-    additional_names = []
-    foreach i : range(additional_classes)
-        additional_names += '@0@'.format(i)
-    endforeach
-
-    # Append them to the original list
-    names += additional_names
-endif
-
 # Generate source files from template
-generated_sources = []
 foreach name : names
     input_header_name = 'uca-net-template-camera.h.in'
     input_source_name = 'uca-net-template-camera.c.in'
@@ -65,8 +42,6 @@ foreach name : names
     output_header_abs = meson.current_source_dir() / output_header_name
     output_source_abs = meson.current_source_dir() / output_source_name
 
-    generator = files('generate.py')
-
     run_command(python, generator, input_header_abs, output_header_abs, name,
         check: false)
     
@@ -75,8 +50,11 @@ foreach name : names
 endforeach
 
 configure_file(
+    input: 'meson_config.h.in',
     output: 'config.h',
     configuration: config,
+    install: true,
+    install_dir: plugindir
 )
 
 shared_library('ucanet',

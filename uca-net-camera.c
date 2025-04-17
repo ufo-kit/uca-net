@@ -98,7 +98,10 @@ GSocketConnection *
 uca_net_camera_get_remote_connection (UcaNetCamera *camera, GError **error)
 {
     UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
-    return g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, error);
+    // g_print ("Going to connect \n");
+    GSocketConnection *connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, error);
+    // g_print ("connected host=%s\n", priv->host);
+    return connection;
 }
 
 static void
@@ -609,8 +612,8 @@ uca_net_camera_init (UcaNetCamera *self)
     priv->size = 0;
 }
 
-G_MODULE_EXPORT GType
-net_camera_plugin_get_type (void)  // Changed name from camera_plugin_get_type
-{
-    return UCA_TYPE_NET_CAMERA;
-}
+// G_MODULE_EXPORT GType
+// camera_plugin_get_type (void)  // Changed name from camera_plugin_get_type
+// {
+//     return UCA_TYPE_NET_CAMERA;
+// }
