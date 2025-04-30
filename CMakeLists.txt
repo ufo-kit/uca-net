@@ -84,8 +84,8 @@ math(EXPR UCA_NET_DERIVED_CLASSES_MAX "${UCA_NET_NUM_DERIVED_CAMERAS} - 1")
 foreach(CAMERA_IDX RANGE 0 ${UCA_NET_DERIVED_CLASSES_MAX})
     set(INPUT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.h.in")
     set(INPUT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.c.in")
-    set(OUTPUT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-${CAMERA_IDX}-camera.h")
-    set(OUTPUT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-${CAMERA_IDX}-camera.c")
+    set(OUTPUT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.h")
+    set(OUTPUT_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.c")
 
     add_custom_command(
         OUTPUT ${OUTPUT_HEADER} ${OUTPUT_SOURCE}
@@ -100,7 +100,7 @@ foreach(CAMERA_IDX RANGE 0 ${UCA_NET_DERIVED_CLASSES_MAX})
     # Build shared library for each derived camera class
     add_library(ucanet${CAMERA_IDX} SHARED
         uca-net-camera.c
-        uca-net-${CAMERA_IDX}-camera.c
+        ${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.c
     )
     
     target_link_libraries(ucanet${CAMERA_IDX}

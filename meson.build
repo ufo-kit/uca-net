@@ -39,8 +39,8 @@ foreach name : names
 
     output_header_name = 'uca-net-' + name + '-camera.h'
     output_source_name = 'uca-net-' + name + '-camera.c'
-    output_header_abs = meson.current_source_dir() / output_header_name
-    output_source_abs = meson.current_source_dir() / output_source_name
+    output_header_abs = meson.current_build_dir() / output_header_name
+    output_source_abs = meson.current_build_dir() / output_source_name
 
     run_command(python, generator, input_header_abs, output_header_abs, name,
         check: false)
@@ -74,7 +74,7 @@ executable('ucad',
 foreach name : names
     message('Building ' + name)
     shared_library('ucanet' + name,
-        sources: ['uca-net-camera.c', 'uca-net-@0@-camera.c'.format(name)],
+        sources: ['uca-net-camera.c', meson.current_build_dir() + '/' + 'uca-net-@0@-camera.c'.format(name)],
         dependencies: [uca_dep, gio_dep],
         install: true,
         install_dir: plugindir,
