@@ -37,8 +37,8 @@ foreach name : names
     input_header_abs = meson.current_source_dir() / input_header_name
     input_source_abs = meson.current_source_dir() / input_source_name
 
-    output_header_name = 'uca-net-' + name + '-camera.h'
-    output_source_name = 'uca-net-' + name + '-camera.c'
+    output_header_name = 'uca-net-' + name + 'camera.h'
+    output_source_name = 'uca-net-' + name + 'camera.c'
     output_header_abs = meson.current_build_dir() / output_header_name
     output_source_abs = meson.current_build_dir() / output_source_name
 
@@ -49,6 +49,22 @@ foreach name : names
         check: false)
 endforeach
 
+input_header_name = 'uca-net-template-camera.h.in'
+input_source_name = 'uca-net-template-camera.c.in'
+input_header_abs = meson.current_source_dir() / input_header_name
+input_source_abs = meson.current_source_dir() / input_source_name
+
+output_header_name = 'uca-net-camera.h'
+output_source_name = 'uca-net-camera.c'
+output_header_abs = meson.current_build_dir() / output_header_name
+output_source_abs = meson.current_build_dir() / output_source_name
+
+run_command(python, generator, input_header_abs, output_header_abs, name,
+            check: false)
+
+run_command(python, generator, input_source_abs, output_source_abs, name,
+            check: false)
+
 configure_file(
     input: 'meson_config.h.in',
     output: 'config.h',
@@ -57,12 +73,6 @@ configure_file(
     install_dir: plugindir
 )
 
-shared_library('ucanet',
-    sources: ['uca-net-camera.c'],
-    dependencies: [uca_dep, gio_dep],
-    install: true,
-    install_dir: plugindir,
-)
 
 executable('ucad',
     sources: ['ucad.c'],
@@ -74,9 +84,17 @@ executable('ucad',
 foreach name : names
     message('Building ' + name)
     shared_library('ucanet' + name,
-        sources: ['uca-net-camera.c', meson.current_build_dir() + '/' + 'uca-net-@0@-camera.c'.format(name)],
+        sources: [meson.current_build_dir() + '/' + 'uca-net-@0@camera.c'.format(name), 'uca-net-base-camera.c'],
         dependencies: [uca_dep, gio_dep],
         install: true,
         install_dir: plugindir,
     )
 endforeach
+
+message('Building ' + name)
+shared_library('ucanet',
+               sources: [meson.current_build_dir() + '/' + 'uca-net-camera.c', 'uca-net-base-camera.c'],
+               dependencies: [uca_dep, gio_dep],
+               install: true,
+               install_dir: plugindir,
+)

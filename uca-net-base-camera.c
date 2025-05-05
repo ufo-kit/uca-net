@@ -22,19 +22,19 @@
 #include <string.h>
 
 #include <uca/uca-camera.h>
-#include "uca-net-camera.h"
+#include "uca-net-base-camera.h"
 #include "uca-net-protocol.h"
 #include "config.h"
 
 
 
-static void uca_net_camera_initable_iface_init (GInitableIface *iface);
+static void uca_net_base_camera_initable_iface_init (GInitableIface *iface);
 
-G_DEFINE_TYPE_WITH_CODE (UcaNetCamera, uca_net_camera, UCA_TYPE_CAMERA,
+G_DEFINE_TYPE_WITH_CODE (UcaNetBaseCamera, uca_net_base_camera, UCA_TYPE_CAMERA,
                          G_IMPLEMENT_INTERFACE (G_TYPE_INITABLE,
-                                                uca_net_camera_initable_iface_init))
+                                                uca_net_base_camera_initable_iface_init))
 
-GQuark uca_net_camera_error_quark ()
+GQuark uca_net_base_camera_error_quark ()
 {
     return g_quark_from_static_string("uca-net-camera-error-quark");
 }
@@ -47,7 +47,7 @@ enum {
 
 static GParamSpec *net_properties[N_PROPERTIES] = { NULL, };
 
-struct _UcaNetCameraPrivate {
+struct _UcaNetBaseCameraPrivate {
     GError              *construct_error;
     gchar               *host;
     GSocketClient       *client;
@@ -95,9 +95,9 @@ handle_default_reply (GSocketConnection *connection, UcaNetMessageType type, GEr
 }
 
 GSocketConnection *
-uca_net_camera_get_remote_connection (UcaNetCamera *camera, GError **error)
+uca_net_base_camera_get_remote_connection (UcaNetBaseCamera *camera, GError **error)
 {
-    UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    UcaNetBaseCameraPrivate *priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (camera);
     // g_print ("Going to connect \n");
     GSocketConnection *connection = g_socket_client_connect_to_host (priv->client, priv->host, UCA_NET_DEFAULT_PORT, NULL, error);
     // g_print ("connected host=%s\n", priv->host);
@@ -105,9 +105,9 @@ uca_net_camera_get_remote_connection (UcaNetCamera *camera, GError **error)
 }
 
 static void
-request_call (UcaNetCamera *camera, UcaNetMessageType type, GError **error)
+request_call (UcaNetBaseCamera *camera, UcaNetMessageType type, GError **error)
 {
-    GSocketConnection *connection = uca_net_camera_get_remote_connection (camera, error);
+    GSocketConnection *connection = uca_net_base_camera_get_remote_connection (camera, error);
     g_return_if_fail (connection != NULL);
 
     if (send_default_message (connection, type, error))
@@ -117,14 +117,14 @@ request_call (UcaNetCamera *camera, UcaNetMessageType type, GError **error)
 }
 
 static void
-uca_net_camera_determine_size (UcaCamera *camera)
+uca_net_base_camera_determine_size (UcaCamera *camera)
 {
     guint width;
     guint height;
     guint bits;
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (camera);
 
     g_object_get (G_OBJECT (camera),
                   "roi-width", &width,
@@ -136,44 +136,44 @@ uca_net_camera_determine_size (UcaCamera *camera)
 }
 
 static void
-uca_net_camera_start_recording (UcaCamera *camera,
+uca_net_base_camera_start_recording (UcaCamera *camera,
                                 GError **error)
 {
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
 
-    UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    UcaNetBaseCameraPrivate *priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (camera);
     if (!priv->size) {
-        uca_net_camera_determine_size (camera);
+        uca_net_base_camera_determine_size (camera);
     }
-    request_call (UCA_NET_CAMERA (camera), UCA_NET_MESSAGE_START_RECORDING, error);
+    request_call (UCA_NET_BASE_CAMERA (camera), UCA_NET_MESSAGE_START_RECORDING, error);
 }
 
 static void
-uca_net_camera_stop_recording (UcaCamera *camera,
+uca_net_base_camera_stop_recording (UcaCamera *camera,
                                GError **error)
 {
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA (camera), UCA_NET_MESSAGE_STOP_RECORDING, error);
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
+    request_call (UCA_NET_BASE_CAMERA (camera), UCA_NET_MESSAGE_STOP_RECORDING, error);
 }
 
 static void
-uca_net_camera_start_readout (UcaCamera *camera,
+uca_net_base_camera_start_readout (UcaCamera *camera,
                               GError **error)
 {
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA (camera), UCA_NET_MESSAGE_START_READOUT, error);
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
+    request_call (UCA_NET_BASE_CAMERA (camera), UCA_NET_MESSAGE_START_READOUT, error);
 }
 
 static void
-uca_net_camera_stop_readout (UcaCamera *camera,
+uca_net_base_camera_stop_readout (UcaCamera *camera,
                              GError **error)
 {
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA (camera), UCA_NET_MESSAGE_STOP_READOUT, error);
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
+    request_call (UCA_NET_BASE_CAMERA (camera), UCA_NET_MESSAGE_STOP_READOUT, error);
 }
 
 static void
-uca_net_camera_write (UcaCamera *camera,
+uca_net_base_camera_write (UcaCamera *camera,
                       const gchar *name,
                       gpointer data,
                       gsize size,
@@ -181,10 +181,10 @@ uca_net_camera_write (UcaCamera *camera,
 {
     UcaNetMessageWriteRequest request = { .type = UCA_NET_MESSAGE_WRITE };
 
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
 
-    UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
-    GSocketConnection *connection = uca_net_camera_get_remote_connection (UCA_NET_CAMERA (camera), error);
+    UcaNetBaseCameraPrivate *priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (camera);
+    GSocketConnection *connection = uca_net_base_camera_get_remote_connection (UCA_NET_BASE_CAMERA (camera), error);
     g_return_if_fail (connection != NULL);
     GOutputStream *output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     request.size = size;
@@ -212,25 +212,25 @@ uca_net_camera_write (UcaCamera *camera,
 }
 
 static gboolean
-uca_net_camera_grab (UcaCamera *camera,
+uca_net_base_camera_grab (UcaCamera *camera,
                      gpointer data,
                      GError **error)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
     GSocketConnection *connection;
     GInputStream *input;
     GOutputStream *output;
     gsize bytes_left;
     UcaNetMessageGrabRequest request = { .type = UCA_NET_MESSAGE_GRAB };
 
-    g_return_val_if_fail (UCA_IS_NET_CAMERA (camera), FALSE);
-    priv = UCA_NET_CAMERA_GET_PRIVATE (camera);
+    g_return_val_if_fail (UCA_IS_NET_BASE_CAMERA (camera), FALSE);
+    priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (camera);
 
     if (!priv->size) {
-        uca_net_camera_determine_size (camera);
+        uca_net_base_camera_determine_size (camera);
     }
 
-    connection = uca_net_camera_get_remote_connection (UCA_NET_CAMERA (camera), error);
+    connection = uca_net_base_camera_get_remote_connection (UCA_NET_BASE_CAMERA (camera), error);
     g_return_val_if_fail (connection != NULL, FALSE);
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
@@ -268,23 +268,23 @@ uca_net_camera_grab (UcaCamera *camera,
 }
 
 static void
-uca_net_camera_trigger (UcaCamera *camera,
+uca_net_base_camera_trigger (UcaCamera *camera,
                         GError **error)
 {
-    g_return_if_fail (UCA_IS_NET_CAMERA (camera));
-    request_call (UCA_NET_CAMERA (camera), UCA_NET_MESSAGE_TRIGGER, error);
+    g_return_if_fail (UCA_IS_NET_BASE_CAMERA (camera));
+    request_call (UCA_NET_BASE_CAMERA (camera), UCA_NET_MESSAGE_TRIGGER, error);
 }
 
 gboolean
-uca_net_camera_set_remote_property (UcaNetCamera *self, const gchar *name, const GValue *value, GError **error)
+uca_net_base_camera_set_remote_property (UcaNetBaseCamera *self, const gchar *name, const GValue *value, GError **error)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
     GOutputStream *output;
     const gchar *str;
     GValue str_value = {0};
     UcaNetMessageSetPropertyRequest request = { .type = UCA_NET_MESSAGE_SET_PROPERTY };
 
-    GSocketConnection *connection = uca_net_camera_get_remote_connection (self, error);
+    GSocketConnection *connection = uca_net_base_camera_get_remote_connection (self, error);
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
     g_value_init (&str_value, G_TYPE_STRING);
 
@@ -315,15 +315,15 @@ uca_net_camera_set_remote_property (UcaNetCamera *self, const gchar *name, const
 }
 
 static void
-uca_net_camera_set_property (GObject *object,
+uca_net_base_camera_set_property (GObject *object,
                              guint property_id,
                              const GValue *value,
                              GParamSpec *pspec)
 {
     GError *error = NULL;
 
-    UcaNetCamera *camera = UCA_NET_CAMERA (object);
-    UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+    UcaNetBaseCamera *camera = UCA_NET_BASE_CAMERA (object);
+    UcaNetBaseCameraPrivate *priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (object);
 
     /* handle net camera props */
     if (property_id == PROP_HOST) {
@@ -339,19 +339,19 @@ uca_net_camera_set_property (GObject *object,
         priv->size = 0;
     }
 
-    if (!uca_net_camera_set_remote_property (camera, name, value, &error))
+    if (!uca_net_base_camera_set_remote_property (camera, name, value, &error))
         g_warning ("Could not set property: %s", error->message);
 }
 
 gboolean
-uca_net_camera_get_remote_property (UcaNetCamera *camera, const gchar *name, GValue *value, GError **error)
+uca_net_base_camera_get_remote_property (UcaNetBaseCamera *camera, const gchar *name, GValue *value, GError **error)
 {
     UcaNetMessageGetPropertyRequest request;
     UcaNetMessageGetPropertyReply reply;
     GInputStream *input;
     GOutputStream *output;
 
-    GSocketConnection *connection = uca_net_camera_get_remote_connection (camera, error);
+    GSocketConnection *connection = uca_net_base_camera_get_remote_connection (camera, error);
 
     input = g_io_stream_get_input_stream (G_IO_STREAM (connection));
     output = g_io_stream_get_output_stream (G_IO_STREAM (connection));
@@ -420,15 +420,15 @@ uca_net_camera_get_remote_property (UcaNetCamera *camera, const gchar *name, GVa
 }
 
 static void
-uca_net_camera_get_property (GObject *object,
+uca_net_base_camera_get_property (GObject *object,
                              guint property_id,
                              GValue *value,
                              GParamSpec *pspec)
 {
     GError *error = NULL;
 
-    UcaNetCamera *camera = UCA_NET_CAMERA (object);
-    UcaNetCameraPrivate *priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+    UcaNetBaseCamera *camera = UCA_NET_BASE_CAMERA (object);
+    UcaNetBaseCameraPrivate *priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (object);
 
     /* handle net camera props */
     switch (property_id) {
@@ -448,16 +448,16 @@ uca_net_camera_get_property (GObject *object,
     /* handle remote props */
     const gchar *name = g_param_spec_get_name (pspec);
 
-    if (!uca_net_camera_get_remote_property (camera, name, value, &error))
+    if (!uca_net_base_camera_get_remote_property (camera, name, value, &error))
         g_warning ("Could not get property on object %p: %s", object, error->message);
 }
 
 static void
-uca_net_camera_dispose (GObject *object)
+uca_net_base_camera_dispose (GObject *object)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+    priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (object);
 
     if (uca_camera_is_recording (UCA_CAMERA (object))) {
         GError *error = NULL;
@@ -470,31 +470,31 @@ uca_net_camera_dispose (GObject *object)
     }
 
     g_clear_object (&priv->client);
-    G_OBJECT_CLASS (uca_net_camera_parent_class)->dispose (object);
+    G_OBJECT_CLASS (uca_net_base_camera_parent_class)->dispose (object);
 }
 
 static void
-uca_net_camera_finalize (GObject *object)
+uca_net_base_camera_finalize (GObject *object)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+    priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (object);
     g_clear_error (&priv->construct_error);
 
     g_free (priv->host);
 
-    G_OBJECT_CLASS (uca_net_camera_parent_class)->finalize (object);
+    G_OBJECT_CLASS (uca_net_base_camera_parent_class)->finalize (object);
 }
 
 static gboolean
-ufo_net_camera_initable_init (GInitable *initable,
+ufo_net_base_camera_initable_init (GInitable *initable,
                               GCancellable *cancellable,
                               GError **error)
 {
-    UcaNetCamera *camera;
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCamera *camera;
+    UcaNetBaseCameraPrivate *priv;
 
-    g_return_val_if_fail (UCA_IS_NET_CAMERA (initable), FALSE);
+    g_return_val_if_fail (UCA_IS_NET_BASE_CAMERA (initable), FALSE);
 
     if (cancellable != NULL) {
         g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
@@ -502,7 +502,7 @@ ufo_net_camera_initable_init (GInitable *initable,
         return FALSE;
     }
 
-    camera = UCA_NET_CAMERA (initable);
+    camera = UCA_NET_BASE_CAMERA (initable);
     priv = camera->priv;
 
     if (priv->construct_error != NULL) {
@@ -516,11 +516,11 @@ ufo_net_camera_initable_init (GInitable *initable,
 }
 
 static void
-uca_net_camera_constructed (GObject *object)
+uca_net_base_camera_constructed (GObject *object)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
 
-    priv = UCA_NET_CAMERA_GET_PRIVATE (object);
+    priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (object);
 
     const gchar *env;
     env = g_getenv ("UCA_NET_HOST");
@@ -528,7 +528,7 @@ uca_net_camera_constructed (GObject *object)
 
     // Connect first
     GError *error = NULL;
-    GSocketConnection *connection = uca_net_camera_get_remote_connection(UCA_NET_CAMERA(object), &error);
+    GSocketConnection *connection = uca_net_base_camera_get_remote_connection(UCA_NET_BASE_CAMERA(object), &error);
     
     if (connection) {
         // Signal that connection is ready - this will trigger property installation in derived classes
@@ -539,34 +539,34 @@ uca_net_camera_constructed (GObject *object)
         g_clear_error(&error);
     }
 
-    G_OBJECT_CLASS (uca_net_camera_parent_class)->constructed (object);
+    G_OBJECT_CLASS (uca_net_base_camera_parent_class)->constructed (object);
 }
 
 static void
-uca_net_camera_initable_iface_init (GInitableIface *iface)
+uca_net_base_camera_initable_iface_init (GInitableIface *iface)
 {
-    iface->init = ufo_net_camera_initable_init;
+    iface->init = ufo_net_base_camera_initable_init;
 }
 
 static void
-uca_net_camera_class_init (UcaNetCameraClass *klass)
+uca_net_base_camera_class_init (UcaNetBaseCameraClass *klass)
 {
     GObjectClass *oclass = G_OBJECT_CLASS (klass);
     UcaCameraClass *camera_class = UCA_CAMERA_CLASS (klass);
 
-    oclass->set_property = uca_net_camera_set_property;
-    oclass->get_property = uca_net_camera_get_property;
-    oclass->constructed = uca_net_camera_constructed;
-    oclass->dispose = uca_net_camera_dispose;
-    oclass->finalize = uca_net_camera_finalize;
+    oclass->set_property = uca_net_base_camera_set_property;
+    oclass->get_property = uca_net_base_camera_get_property;
+    oclass->constructed = uca_net_base_camera_constructed;
+    oclass->dispose = uca_net_base_camera_dispose;
+    oclass->finalize = uca_net_base_camera_finalize;
 
-    camera_class->start_recording = uca_net_camera_start_recording;
-    camera_class->stop_recording = uca_net_camera_stop_recording;
-    camera_class->start_readout = uca_net_camera_start_readout;
-    camera_class->stop_readout = uca_net_camera_stop_readout;
-    camera_class->write = uca_net_camera_write;
-    camera_class->grab = uca_net_camera_grab;
-    camera_class->trigger = uca_net_camera_trigger;
+    camera_class->start_recording = uca_net_base_camera_start_recording;
+    camera_class->stop_recording = uca_net_base_camera_stop_recording;
+    camera_class->start_readout = uca_net_base_camera_start_readout;
+    camera_class->stop_readout = uca_net_base_camera_stop_readout;
+    camera_class->write = uca_net_base_camera_write;
+    camera_class->grab = uca_net_base_camera_grab;
+    camera_class->trigger = uca_net_base_camera_trigger;
 
     net_properties[PROP_HOST] =
         g_param_spec_string ("host",
@@ -596,15 +596,15 @@ uca_net_camera_class_init (UcaNetCameraClass *klass)
                  G_TYPE_NONE,
                  1, G_TYPE_OBJECT);
 
-    g_type_class_add_private (klass, sizeof(UcaNetCameraPrivate));
+    g_type_class_add_private (klass, sizeof(UcaNetBaseCameraPrivate));
 }
 
 static void
-uca_net_camera_init (UcaNetCamera *self)
+uca_net_base_camera_init (UcaNetBaseCamera *self)
 {
-    UcaNetCameraPrivate *priv;
+    UcaNetBaseCameraPrivate *priv;
 
-    self->priv = priv = UCA_NET_CAMERA_GET_PRIVATE (self);
+    self->priv = priv = UCA_NET_BASE_CAMERA_GET_PRIVATE (self);
 
     priv->host = NULL;
     priv->construct_error = NULL;
