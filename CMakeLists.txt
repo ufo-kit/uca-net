@@ -52,16 +52,6 @@ link_directories(
     ${ZMQ_LIBRARY_DIRS}
     ${JSON_GLIB_LIBRARY_DIRS})
 
-# uca-net client camera
-add_library(ucanet SHARED uca-net-camera.c)
-
-target_link_libraries(ucanet
-    ${UCA_LIBRARIES}
-    ${GIO_LIBRARIES})
-
-install(TARGETS ucanet
-        LIBRARY DESTINATION ${LIBUCA_PLUGINDIR}
-        RUNTIME DESTINATION ${LIBUCA_PLUGINDIR})
 
 # uca-net server
 add_executable(ucad ucad.c)
@@ -84,8 +74,8 @@ math(EXPR UCA_NET_DERIVED_CLASSES_MAX "${UCA_NET_NUM_DERIVED_CAMERAS} - 1")
 foreach(CAMERA_IDX RANGE 0 ${UCA_NET_DERIVED_CLASSES_MAX})
     set(INPUT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.h.in")
     set(INPUT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.c.in")
-    set(OUTPUT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.h")
-    set(OUTPUT_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.c")
+    set(OUTPUT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}camera.h")
+    set(OUTPUT_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}camera.c")
 
     add_custom_command(
         OUTPUT ${OUTPUT_HEADER} ${OUTPUT_SOURCE}
@@ -97,10 +87,11 @@ foreach(CAMERA_IDX RANGE 0 ${UCA_NET_DERIVED_CLASSES_MAX})
         COMMENT "Generating camera class ${CAMERA_IDX}"
     )
 
+
     # Build shared library for each derived camera class
     add_library(ucanet${CAMERA_IDX} SHARED
-        uca-net-camera.c
-        ${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}-camera.c
+            uca-net-base-camera.c
+        ${CMAKE_CURRENT_BINARY_DIR}/uca-net-${CAMERA_IDX}camera.c
     )
     
     target_link_libraries(ucanet${CAMERA_IDX}
@@ -120,3 +111,42 @@ foreach(CAMERA_IDX RANGE 0 ${UCA_NET_DERIVED_CLASSES_MAX})
     )
     add_dependencies(ucanet${CAMERA_IDX} generate_camera_${CAMERA_IDX})
 endforeach()
+
+set(INPUT_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.h.in")
+set(INPUT_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/uca-net-template-camera.c.in")
+set(OUTPUT_HEADER "${CMAKE_CURRENT_BINARY_DIR}/uca-net-camera.h")
+set(OUTPUT_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/uca-net-camera.c")
+
+add_custom_command(
+        OUTPUT ${OUTPUT_HEADER} ${OUTPUT_SOURCE}
+        COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate.py
+        ${INPUT_HEADER} ${OUTPUT_HEADER} ''
+        COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/generate.py
+        ${INPUT_SOURCE} ${OUTPUT_SOURCE} ''
+        DEPENDS ${INPUT_HEADER} ${INPUT_SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/generate.py
+        COMMENT "Generating default camera class"
+)
+
+
+# Build shared library for each derived camera class
+add_library(ucanet SHARED
+        uca-net-base-camera.c
+        ${CMAKE_CURRENT_BINARY_DIR}/uca-net-camera.c
+)
+
+target_link_libraries(ucanet
+        ${UCA_LIBRARIES}
+        ${GIO_LIBRARIES}
+)
+
+install(TARGETS ucanet
+        LIBRARY DESTINATION ${LIBUCA_PLUGINDIR}
+        RUNTIME DESTINATION ${LIBUCA_PLUGINDIR}
+)
+
+# Make sure the files are generated before building
+add_custom_target(generate_camera DEPENDS
+        ${OUTPUT_HEADER}
+        ${OUTPUT_SOURCE}
+)
+add_dependencies(ucanet generate_camera)
