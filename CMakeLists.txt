@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.10)
 
 if (POLICY CMP0053)
 cmake_policy(SET CMP0053 OLD)
@@ -9,6 +9,8 @@ if (POLICY CMP0054)
 endif ()
 
 project(ucanet C)
+
+option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
@@ -23,9 +25,15 @@ add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
 pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
 pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
-pkg_check_modules(ZMQ libzmq)
-pkg_check_modules(JSON_GLIB json-glib-1.0)
 pkg_check_variable(libuca plugindir)
+
+if (WITH_ZMQ_NETWORKING)
+    pkg_check_modules(ZMQ libzmq)
+    pkg_check_modules(JSON_GLIB json-glib-1.0)
+    if (NOT ZMQ_FOUND OR NOT JSON_GLIB_FOUND)
+        message(FATAL "ZMQ dependencies not found")
+    endif ()
+endif()
 
 set(UCA_NET_DEFAULT_PORT 8989)
 
@@ -33,9 +41,6 @@ if (UNIX)
     set(HAVE_UNIX 1)
 endif ()
 
-if (ZMQ_FOUND AND JSON_GLIB_FOUND)
-    option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
-endif ()
 
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/config.h.in

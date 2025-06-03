@@ -239,6 +239,7 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 #undef CASE_NUMERIC
 }
 
+#ifdef WITH_ZMQ_NETWORKING
 /**
  * Create header, if buffer is NULL then create a special header signalling
  * end-of-stream, otherwise make the standard header to be sent along with the
@@ -361,7 +362,6 @@ udad_zmq_wait_for_all (void)
     return zmq_retval_all;
 }
 
-#ifdef WITH_ZMQ_NETWORKING
 static gboolean
 ucad_zmq_node_init (UcadZmqNode *node, UcaNetMessageAddZmqEndpointRequest *request, gpointer context, GError **error)
 {
