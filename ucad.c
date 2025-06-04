@@ -626,12 +626,12 @@ handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 static void
 handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
-    GError *error = NULL;
-    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
     /* Clear flag if called when not streaming */
     stop_streaming_requested = FALSE;
 
 #ifdef WITH_ZMQ_NETWORKING
+    GError* error = NULL;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
     guint pixel_size, width, height, bitdepth, rotate;
@@ -743,35 +743,41 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
     }
 
-#else
-    g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
-                 "Sending over network unavailable due to missing zmq prerequisites");
-#endif
-
-send_error_reply:
-    g_debug ("Pushed %lu frames, poison pill: %d", num_sent, send_poison_pill);
+  send_error_reply:
+    g_debug("Pushed %lu frames, poison pill: %d", num_sent, send_poison_pill);
     if (send_poison_pill) {
-        num_sent = 0;
+      num_sent = 0;
     }
-    g_thread_pool_free (pool, FALSE, TRUE);
-    g_free (payload->buffer);
-    g_free (payload);
-    prepare_error_reply (error, &reply.error);
-    send_reply (connection, &reply, sizeof (reply), stream_error);
+    g_thread_pool_free(pool, FALSE, TRUE);
+    g_free(payload->buffer);
+    g_free(payload);
+    prepare_error_reply(error, &reply.error);
+    send_reply(connection, &reply, sizeof(reply), stream_error);
+
+#else
+    g_set_error (stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_stop_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     g_debug ("Stop push request");
     stop_streaming_requested = TRUE;
     UcaNetDefaultReply reply = { .type = ((UcaNetMessageDefault *) message)->type };
     send_reply (connection, &reply, sizeof (reply), stream_error);
+#else
+  g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+      "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetMessageAddZmqEndpointRequest *request = (UcaNetMessageAddZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT };
     static gpointer context = NULL;
@@ -805,11 +811,16 @@ send_error_reply:
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetMessageRemoveZmqEndpointRequest *request = (UcaNetMessageRemoveZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT };
     GError *error = NULL;
@@ -827,11 +838,16 @@ handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *ca
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_remove_all_endpoints_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ALL_ENDPOINTS };
 
     if (zmq_endpoints != NULL) {
@@ -839,6 +855,10 @@ handle_zmq_remove_all_endpoints_request (GSocketConnection *connection, UcaCamer
     }
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("All endpoints removed");
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
