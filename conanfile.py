@@ -7,7 +7,7 @@ class UcaNetConan(ConanFile):
     version = "1.0"
     license = "MIT"
     author = "Marius Elvert marius.elvert@softwareschneiderei.de"
-    url = "https://github.com/ufo-kit/libuca"
+    url = "https://github.com/ufo-kit/uca-net"
     description = "TCP-based network bridge for libuca."
     topics = ("utilities",)
     settings = "os", "compiler", "build_type", "arch"
