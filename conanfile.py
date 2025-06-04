@@ -16,6 +16,11 @@ class UcaNetConan(ConanFile):
     generators = "CMakeDeps"
     exports_sources = "*.h", "*.c", "cmake/*", "CMakeLists.txt", "config.h.in"
     requires = "libuca/2.3.0", "glib/2.81.0",
+    
+    def configure(self):
+        # These are not applicable for C libraries
+        self.settings.rm_safe("compiler.libcxx")
+        self.settings.rm_safe("compiler.cppstd")
 
     def generate(self):
         toolchain = CMakeToolchain(self)
