@@ -26,6 +26,7 @@ class UcaNetConan(ConanFile):
         self.requires("glib/2.81.0")
         if self.options.with_zeromq:
             self.requires("zeromq/4.3.5")
+            self.requires("json-c/0.18")
 
     def generate(self):
         toolchain = CMakeToolchain(self)
