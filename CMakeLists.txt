@@ -66,8 +66,10 @@ endif()
 
 if(MSVC)
     add_definitions("/wd4996")
+else()
+    add_definitions("-Wall -fPIC")
 endif()
-#add_definitions("-Wall -fPIC")
+
 add_definitions(-DG_LOG_DOMAIN="Uca-Net")
 
 set(UCA_NET_DEFAULT_PORT 8989)
