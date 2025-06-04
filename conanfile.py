@@ -4,7 +4,7 @@ from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 
 class UcaNetConan(ConanFile):
     name = "uca-net"
-    version = "9906e95"
+    version = "1.0"
     license = "MIT"
     author = "Marius Elvert marius.elvert@softwareschneiderei.de"
     url = "https://github.com/ufo-kit/libuca"
