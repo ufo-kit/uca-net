@@ -12,6 +12,11 @@ if (USE_FIND_PACKAGE_FOR_GLIB)
 
     set(UCANET_DEPS glib::glib libuca::libuca)
     set(UCAD_DEPS glib::glib libuca::libuca)
+
+    if (WITH_ZMQ_NETWORKING)
+        find_package(ZeroMQ REQUIRED)
+        set(UCAD_DEPS ${UCAD_DEPS} libzmq-static)
+    endif()
 else()
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
