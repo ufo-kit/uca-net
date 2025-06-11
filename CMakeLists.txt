@@ -33,9 +33,9 @@ else()
 
     if (WITH_ZMQ_NETWORKING)
         pkg_check_modules(ZMQ libzmq)
-        pkg_check_modules(JSON_GLIB json-glib-1.0)
-        if (NOT ZMQ_FOUND OR NOT JSON_GLIB_FOUND)
-            message(FATAL "ZMQ dependencies not found")
+        pkg_check_modules(JSON_C json-c)
+        if (NOT ZMQ_FOUND OR NOT JSON_C_FOUND)
+            message(FATAL_ERROR "ZMQ dependencies not found")
         endif ()
     endif()
 
@@ -45,13 +45,13 @@ else()
         ${UCA_INCLUDE_DIRS}
         ${GIO_INCLUDE_DIRS}
         ${ZMQ_INCLUDE_DIRS}
-        ${JSON_GLIB_INCLUDE_DIRS})
+        ${JSON_C_INCLUDE_DIRS})
 
     link_directories(
         ${UCA_LIBRARY_DIRS}
         ${GIO_LIBRARY_DIRS}
         ${ZMQ_LIBRARY_DIRS}
-        ${JSON_GLIB_LIBRARY_DIRS})
+        ${JSON_C_LIBRARY_DIRS})
 
     set(UCANET_DEPS
         ${UCA_LIBRARIES}
@@ -61,7 +61,7 @@ else()
         ${UCA_LIBRARIES}
         ${GIO_LIBRARIES}
         ${ZMQ_LIBRARIES}
-        ${JSON_GLIB_LIBRARIES})
+        ${JSON_C_LIBRARIES})
 endif()
 
 if(MSVC)
