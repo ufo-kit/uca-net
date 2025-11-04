@@ -3,7 +3,7 @@ project('ucanet', 'c')
 uca_dep = dependency('libuca', version: '>= 2.0')
 gio_dep = dependency('gio-2.0', version: '>= 2.22')
 zmq_dep = dependency('libzmq', required: false)
-json_dep = dependency('json-glib-1.0', version: '>=1.1.0', required: false)
+json_dep = dependency('json-c', required: false)
 
 plugindir = uca_dep.get_pkgconfig_variable('plugindir')
 

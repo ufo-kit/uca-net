@@ -30,7 +30,7 @@
 
 #ifdef WITH_ZMQ_NETWORKING
 #include <zmq.h>
-#include <json-glib/json-glib.h>
+#include <json-c/json_object.h>
 #endif
 
 static GMainLoop *loop;
@@ -239,24 +239,25 @@ serialize_param_spec (GParamSpec *pspec, UcaNetMessageProperty *prop)
 #undef CASE_NUMERIC
 }
 
+#ifdef WITH_ZMQ_NETWORKING
 /**
  * Create header, if buffer is NULL then create a special header signalling
  * end-of-stream, otherwise make the standard header to be sent along with the
  * image itself.
  */
-static gchar *
+static char *
 ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint pixel_size, gboolean mirror, guint rotate, guint64 num_sent, gsize *length,
                               gboolean send_poison_pill)
 {
     if (num_sent == G_MAXUINT64)  {
         g_warning("Integer overflow would occur for upcoming frame, num_sent:%lu\n", num_sent);
     }
-    JsonBuilder *builder = NULL;
-    JsonGenerator *generator = NULL;
-    JsonNode *tree;
-    gchar *header;
+    json_object *tree = NULL;
+    json_object *detail = NULL;
+    const char *header;
+    char *result;
     GDateTime *dt;
-    gchar *timestamp;
+    char *timestamp;
 
     if (buffer == NULL && !send_poison_pill) {
         /* Do not send poison pill, we don't need to generate any json structure */
@@ -264,58 +265,47 @@ ucad_zmq_create_image_header (gpointer buffer, guint width, guint height, guint 
         return NULL;
     }
 
-    if (builder == NULL) {
-        builder = json_builder_new_immutable ();
-        generator = json_generator_new ();
-    }
-
-    json_builder_reset (builder);
-    json_builder_begin_object (builder);
+    tree = json_object_new_object();
 
     /* Frame number */
     if (buffer != NULL) {
         gchar *frame_number = g_strdup_printf("%lu", num_sent);
-        json_builder_set_member_name (builder, "frame-number");
-        json_builder_add_string_value(builder, frame_number);
+        json_object_object_add(tree, "frame-number", json_object_new_string(frame_number));
         g_free(frame_number);
         /* Timestamp */
         dt = g_date_time_new_now_local ();
         timestamp = g_strdup_printf ("%ld.%d", g_date_time_to_unix (dt), g_date_time_get_microsecond (dt));
-        json_builder_set_member_name (builder, "timestamp");
-        json_builder_add_string_value (builder, timestamp);
+        json_object_object_add(tree, "timestamp", json_object_new_string(timestamp));
         g_free (timestamp);
         g_date_time_unref (dt);
 
         /* Data type, we assume all detectors having unsigned data types */
-        json_builder_set_member_name (builder, "dtype");
-        json_builder_add_string_value (builder, pixel_size == 1 ? "uint8" : "uint16");
+        json_object_object_add(tree, "dtype", json_object_new_string(pixel_size == 1 ? "uint8" : "uint16"));
 
         /* Image shape */
-        json_builder_set_member_name (builder, "shape");
-        json_builder_begin_array (builder);
-        json_builder_add_int_value (builder, (gint) height);
-        json_builder_add_int_value (builder, (gint) width);
-        json_builder_end_array (builder);
+        detail = json_object_new_array_ext(2);
+        json_object_array_add(detail, json_object_new_int((gint)height));
+        json_object_array_add(detail, json_object_new_int((gint)width));
+        json_object_object_add(tree, "shape", detail);
 
         // Image transformations that the receiver should apply
-        json_builder_set_member_name (builder, "mirror");
-        json_builder_add_boolean_value(builder, mirror);
-        json_builder_set_member_name (builder, "rotate");
-        json_builder_add_int_value(builder, rotate);
+        json_object_object_add(tree, "mirror", json_object_new_boolean(mirror));
+        json_object_object_add(tree, "rotate", json_object_new_int(rotate));
 
     } else {
-        json_builder_set_member_name (builder, "end");
-        json_builder_add_boolean_value (builder, TRUE);
+        json_object_object_add(tree, "end", json_object_new_boolean(TRUE));
     }
 
     /* Create JSON string */
-    json_builder_end_object (builder);
-    tree = json_builder_get_root (builder);
-    json_generator_set_root (generator, tree);
-    header = json_generator_to_data (generator, length);
-    json_node_unref (tree);
+    header = json_object_to_json_string_length(tree, JSON_C_TO_STRING_PLAIN, length);
+    
+    /* The serialized JSON is owned by the json object, so we duplicate it here... */
+    result = strdup(header);
 
-    return header;
+    /* ...before dereferencing the json structure */
+    json_object_put(tree);
+
+    return result;
 }
 
 /**
@@ -361,7 +351,6 @@ udad_zmq_wait_for_all (void)
     return zmq_retval_all;
 }
 
-#ifdef WITH_ZMQ_NETWORKING
 static gboolean
 ucad_zmq_node_init (UcadZmqNode *node, UcaNetMessageAddZmqEndpointRequest *request, gpointer context, GError **error)
 {
@@ -626,12 +615,12 @@ handle_grab_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 static void
 handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
-    GError *error = NULL;
-    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
     /* Clear flag if called when not streaming */
     stop_streaming_requested = FALSE;
 
 #ifdef WITH_ZMQ_NETWORKING
+    GError* error = NULL;
+    UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_PUSH };
     UcaNetMessagePushRequest *request;
     gsize current_frame_size;
     guint pixel_size, width, height, bitdepth, rotate;
@@ -718,7 +707,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
 
         /* Get status from all senders */
         zmq_retval = udad_zmq_wait_for_all ();
-        g_free (payload->header);
+        free (payload->header);
         if (zmq_retval < 0) {
             /* If even only one failed we stop sending, stop the threads without
              * end of stream and return */
@@ -735,7 +724,7 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
             payload->header = ucad_zmq_create_image_header (NULL, 0, 0, 0, 0, 0,0, &payload->header_size, send_poison_pill);
             udad_zmq_push_to_all (payload);
             zmq_retval = udad_zmq_wait_for_all ();
-            g_free (payload->header);
+            free (payload->header);
             if (zmq_retval < 0) {
                 g_warning ("sending end of stream failed: %s\n", zmq_strerror (zmq_retval));
             }
@@ -743,35 +732,41 @@ handle_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer 
         }
     }
 
-#else
-    g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
-                 "Sending over network unavailable due to missing zmq prerequisites");
-#endif
-
-send_error_reply:
-    g_debug ("Pushed %lu frames, poison pill: %d", num_sent, send_poison_pill);
+  send_error_reply:
+    g_debug("Pushed %lu frames, poison pill: %d", num_sent, send_poison_pill);
     if (send_poison_pill) {
-        num_sent = 0;
+      num_sent = 0;
     }
-    g_thread_pool_free (pool, FALSE, TRUE);
-    g_free (payload->buffer);
-    g_free (payload);
-    prepare_error_reply (error, &reply.error);
-    send_reply (connection, &reply, sizeof (reply), stream_error);
+    g_thread_pool_free(pool, FALSE, TRUE);
+    g_free(payload->buffer);
+    g_free(payload);
+    prepare_error_reply(error, &reply.error);
+    send_reply(connection, &reply, sizeof(reply), stream_error);
+
+#else
+    g_set_error (stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_stop_push_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     g_debug ("Stop push request");
     stop_streaming_requested = TRUE;
     UcaNetDefaultReply reply = { .type = ((UcaNetMessageDefault *) message)->type };
     send_reply (connection, &reply, sizeof (reply), stream_error);
+#else
+  g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+      "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetMessageAddZmqEndpointRequest *request = (UcaNetMessageAddZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT };
     static gpointer context = NULL;
@@ -805,11 +800,16 @@ send_error_reply:
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetMessageRemoveZmqEndpointRequest *request = (UcaNetMessageRemoveZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ENDPOINT };
     GError *error = NULL;
@@ -827,11 +827,16 @@ handle_zmq_remove_endpoint_request (GSocketConnection *connection, UcaCamera *ca
     prepare_error_reply (error, &reply.error);
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("Current number of endpoints: %d", g_hash_table_size (zmq_endpoints));
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
 handle_zmq_remove_all_endpoints_request (GSocketConnection *connection, UcaCamera *camera, gpointer message, GError **stream_error)
 {
+#ifdef WITH_ZMQ_NETWORKING
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_REMOVE_ALL_ENDPOINTS };
 
     if (zmq_endpoints != NULL) {
@@ -839,6 +844,10 @@ handle_zmq_remove_all_endpoints_request (GSocketConnection *connection, UcaCamer
     }
     send_reply (connection, &reply, sizeof (reply), stream_error);
     g_debug ("All endpoints removed");
+#else
+    g_set_error(stream_error, UCAD_ERROR, UCAD_ERROR_ZMQ_NOT_AVAILABLE,
+        "ZMQ not enabled");
+#endif
 }
 
 static void
