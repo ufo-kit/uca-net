@@ -103,18 +103,6 @@ configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
     ${GENERATED_CODE_DIR}/config.h)
 
-# uca-net client camera
-add_library(ucanet SHARED uca-net-camera.c)
-
-target_link_libraries(ucanet
-    PUBLIC ${UCANET_DEPS})
-
-target_include_directories(ucanet
-    PUBLIC ${GENERATED_CODE_DIR})
-
-install(TARGETS ucanet
-    LIBRARY DESTINATION ${LIBUCA_PLUGINDIR}
-    RUNTIME DESTINATION ${LIBUCA_PLUGINDIR})
 
 # uca-net server
 add_executable(ucad ucad.c)
