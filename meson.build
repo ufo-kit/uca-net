@@ -15,9 +15,7 @@ if zmq_dep.found() and json_dep.found()
   config.set('WITH_ZMQ_NETWORKING', true)
 endif
 
-min_derived_classes = get_option('min_derived_net_cameras')
 
-config.set('UCA_NET_MIN_DERIVED_CAMERAS', min_derived_classes)
 config.set_quoted('UCA_NET_PLUGIN_DIR', plugindir)
 config.set('UCA_NET_DEFAULT_PORT', get_option('default_port'))
 config.set('UCA_NET_NUM_DERIVED_CAMERAS', num_derived_classes)
