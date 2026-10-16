@@ -1,1 +1,2 @@
 option('default_port', type: 'string', value: '8989', description: 'Default listen port')
+option('num_derived_net_cameras', type: 'integer', value: 10, description: 'Number of derived net camera classes to generate')

@@ -1,0 +1,35 @@
+#ifndef __UCA_NET_{DERIVED}CAMERA_H
+#define __UCA_NET_{DERIVED}CAMERA_H
+
+#include <glib-object.h>
+#include <uca/uca-camera.h>
+#include "uca-net-base-camera.h"
+
+G_BEGIN_DECLS
+
+#undef UCA_TYPE_NET_{DERIVED}CAMERA
+#define UCA_TYPE_NET_{DERIVED}CAMERA             (uca_net_{derived}camera_get_type())
+#define UCA_NET_{DERIVED}CAMERA(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), UCA_TYPE_NET_{DERIVED}CAMERA, UcaNet{Derived}Camera))
+#define UCA_IS_NET_{DERIVED}CAMERA(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), UCA_TYPE_NET_{DERIVED}CAMERA))
+#define UCA_NET_{DERIVED}CAMERA_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), UCA_TYPE_NET_{DERIVED}CAMERA, UcaNet{Derived}CameraClass))
+#define UCA_IS_NET_{DERIVED}CAMERA_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), UCA_TYPE_NET_{DERIVED}CAMERA))
+#define UCA_NET_{DERIVED}CAMERA_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS((obj), UCA_TYPE_NET_{DERIVED}CAMERA, UcaNet{Derived}CameraClass))
+
+typedef struct _UcaNet{Derived}Camera           UcaNet{Derived}Camera;
+typedef struct _UcaNet{Derived}CameraClass      UcaNet{Derived}CameraClass;
+typedef struct _UcaNet{Derived}CameraPrivate    UcaNet{Derived}CameraPrivate;
+
+struct _UcaNet{Derived}Camera {
+    UcaNetBaseCamera parent;
+    UcaNet{Derived}CameraPrivate *priv;
+};
+
+struct _UcaNet{Derived}CameraClass {
+    UcaNetBaseCameraClass parent_class;
+};
+
+GType uca_net_{derived}camera_get_type(void);
+
+G_END_DECLS
+
+#endif /* __UCA_NET_{DERIVED}_CAMERA_H */
