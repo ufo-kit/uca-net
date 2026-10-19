@@ -7,6 +7,8 @@ set(CMAKE_C_STANDARD 99)
 option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
 option(USE_FIND_PACKAGE_FOR_GLIB "Use find_package instead of pkg-config to find GLib dependencies" OFF)
 
+include(cmake/options.cmake)
+
 if (USE_FIND_PACKAGE_FOR_GLIB)
     find_package(libuca REQUIRED)
     find_package(glib REQUIRED)
@@ -27,7 +29,6 @@ else()
     include(FindPackageHandleStandardArgs)
     include(PkgConfigVars)
     include(GNUInstallDirs)
-include(cmake/options.cmake) # Include the options file
 
     pkg_check_modules(GIO gio-2.0>=2.22 REQUIRED)
     pkg_check_modules(UCA libuca>=2.1.0 REQUIRED)
@@ -43,9 +44,6 @@ if (UNIX)
     set(HAVE_UNIX 1)
 endif ()
 
-if (ZMQ_FOUND AND JSON_GLIB_FOUND)
-    option(WITH_ZMQ_NETWORKING "Enable sending data over network with zmq" ON)
-endif ()
     if (WITH_ZMQ_NETWORKING)
         pkg_check_modules(ZMQ libzmq)
         pkg_check_modules(JSON_C json-c)
@@ -53,10 +51,6 @@ endif ()
             message(FATAL_ERROR "ZMQ dependencies not found")
         endif ()
     endif()
-
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake_config.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 
     include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -97,11 +91,11 @@ if (UNIX)
     set(HAVE_UNIX 1)
 endif ()
 
-set(GENERATED_CODE_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
-
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
-    ${GENERATED_CODE_DIR}/config.h)
+    ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 
 # uca-net server
@@ -109,9 +103,6 @@ add_executable(ucad ucad.c)
 
 target_link_libraries(ucad
     PUBLIC ${UCAD_DEPS})
-
-target_include_directories(ucad
-    PUBLIC ${GENERATED_CODE_DIR})
 
 install(TARGETS ucad
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -201,3 +192,5 @@ add_custom_target(generate_camera DEPENDS
         ${OUTPUT_SOURCE}
 )
 add_dependencies(ucanet generate_camera)
+# Print the selected networking option.
+message(STATUS "WITH_ZMQ_NETWORKING: ${WITH_ZMQ_NETWORKING}")

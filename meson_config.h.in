@@ -4,5 +4,6 @@
 #mesondefine HAVE_UNIX
 #mesondefine UCA_NET_DEFAULT_PORT
 #mesondefine UCA_NET_NUM_DERIVED_CAMERAS
+#mesondefine WITH_ZMQ_NETWORKING
 
 #endif /* CONFIG_H */

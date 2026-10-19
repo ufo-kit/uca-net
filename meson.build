@@ -28,7 +28,7 @@ foreach i : range(num_derived_classes)
     names += ['@0@'.format(i)]
 endforeach
 
-# Generate source files from template
+# Generate source files from the templates.
 foreach name : names
     input_header_name = 'uca-net-template-camera.h.in'
     input_source_name = 'uca-net-template-camera.c.in'
@@ -78,7 +78,7 @@ executable('ucad',
     install: true,
 )
 
-# Build shared libraries
+# Build shared libraries.
 foreach name : names
     message('Building ' + name)
     shared_library('ucanet' + name,

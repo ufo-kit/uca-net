@@ -981,6 +981,11 @@ serve (UcaCamera *camera, guint16 port, GError **error)
 int
 main (int argc, char **argv)
 {
+    // Print whether WITH_ZMQ_NETWORKING is defined.
+#ifdef WITH_ZMQ_NETWORKING
+    g_print ("WITH_ZMQ_NETWORKING is defined\n");
+#endif
+
     GOptionContext *context;
     UcaPluginManager *manager;
     UcaCamera *camera;
