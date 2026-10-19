@@ -26,6 +26,11 @@
 
 #ifdef HAVE_UNIX
 #include <glib-unix.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <errno.h>
 #endif
 
 #ifdef WITH_ZMQ_NETWORKING
@@ -93,6 +98,146 @@ GQuark ucad_error_quark()
 {
     return g_quark_from_static_string ("ucad-error-quark");
 }
+
+#ifdef WITH_ZMQ_NETWORKING
+static gboolean
+ucad_zmq_endpoint_is_local (const gchar *endpoint, GError **error)
+{
+    const gchar *prefix = "tcp://";
+    const gchar *host_start;
+    const gchar *host_end;
+    gchar *host;
+    gboolean is_local = FALSE;
+
+    if (!g_str_has_prefix (endpoint, prefix))
+        return TRUE;
+
+    host_start = endpoint + strlen (prefix);
+    if (*host_start == '[') {
+        host_end = strchr (host_start + 1, ']');
+        if (host_end == NULL) {
+            g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                         "invalid TCP endpoint: missing closing bracket");
+            return FALSE;
+        }
+        host = g_strndup (host_start + 1, host_end - host_start - 1);
+    } else {
+        host_end = strrchr (host_start, ':');
+        host = host_end != NULL
+            ? g_strndup (host_start, host_end - host_start)
+            : g_strdup (host_start);
+    }
+
+    if (host[0] == '\0') {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                     "invalid TCP endpoint: host is empty");
+        g_free (host);
+        return FALSE;
+    }
+
+    /* A local hostname may resolve to a loopback alias such as 127.0.1.1. */
+    if (g_ascii_strcasecmp (host, g_get_host_name ()) == 0) {
+        g_free (host);
+        return TRUE;
+    }
+
+#ifdef HAVE_UNIX
+    {
+        struct ifaddrs *interfaces = NULL;
+        struct ifaddrs *interface;
+
+        if (getifaddrs (&interfaces) == 0) {
+            for (interface = interfaces; interface != NULL; interface = interface->ifa_next) {
+                if (interface->ifa_name != NULL &&
+                    g_strcmp0 (host, interface->ifa_name) == 0) {
+                    freeifaddrs (interfaces);
+                    g_free (host);
+                    return TRUE;
+                }
+            }
+            freeifaddrs (interfaces);
+        }
+    }
+#endif
+
+    /* Wildcard addresses are explicitly valid bind addresses. */
+    if (g_str_equal (host, "*") ||
+        g_str_equal (host, "0.0.0.0") ||
+        g_str_equal (host, "::")) {
+        g_free (host);
+        return TRUE;
+    }
+
+#ifdef HAVE_UNIX
+    {
+        struct addrinfo hints = { 0 };
+        struct addrinfo *resolved_addresses = NULL;
+        struct ifaddrs *interfaces = NULL;
+        struct addrinfo *resolved;
+        gint result;
+
+        hints.ai_family = AF_UNSPEC;
+        result = getaddrinfo (host, NULL, &hints, &resolved_addresses);
+        if (result != 0) {
+            g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                         "TCP endpoint host `%s' cannot be resolved: %s",
+                         host, gai_strerror (result));
+            g_free (host);
+            return FALSE;
+        }
+
+        if (getifaddrs (&interfaces) != 0) {
+            g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                         "could not enumerate local network interfaces: %s",
+                         g_strerror (errno));
+            freeaddrinfo (resolved_addresses);
+            g_free (host);
+            return FALSE;
+        }
+
+        for (resolved = resolved_addresses; resolved != NULL && !is_local;
+             resolved = resolved->ai_next) {
+            struct ifaddrs *interface;
+
+            for (interface = interfaces; interface != NULL; interface = interface->ifa_next) {
+                if (interface->ifa_addr == NULL ||
+                    interface->ifa_addr->sa_family != resolved->ai_family)
+                    continue;
+
+                if (resolved->ai_family == AF_INET &&
+                    memcmp (&((struct sockaddr_in *) resolved->ai_addr)->sin_addr,
+                            &((struct sockaddr_in *) interface->ifa_addr)->sin_addr,
+                            sizeof (struct in_addr)) == 0) {
+                    is_local = TRUE;
+                    break;
+                }
+
+                if (resolved->ai_family == AF_INET6 &&
+                    memcmp (&((struct sockaddr_in6 *) resolved->ai_addr)->sin6_addr,
+                            &((struct sockaddr_in6 *) interface->ifa_addr)->sin6_addr,
+                            sizeof (struct in6_addr)) == 0) {
+                    is_local = TRUE;
+                    break;
+                }
+            }
+        }
+
+        freeifaddrs (interfaces);
+        freeaddrinfo (resolved_addresses);
+    }
+#else
+    is_local = g_ascii_strcasecmp (host, g_get_host_name ()) == 0;
+#endif
+
+    if (!is_local) {
+        g_set_error (error, UCAD_ERROR, UCAD_ERROR_ZMQ_INVALID_ENDPOINT,
+                     "TCP endpoint host `%s' is not assigned to this machine", host);
+    }
+
+    g_free (host);
+    return is_local;
+}
+#endif
 
 static gchar *
 get_camera_list (UcaPluginManager *manager)
@@ -770,7 +915,7 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
     UcaNetMessageAddZmqEndpointRequest *request = (UcaNetMessageAddZmqEndpointRequest *) message;
     UcaNetDefaultReply reply = { .type = UCA_NET_MESSAGE_ZMQ_ADD_ENDPOINT };
     static gpointer context = NULL;
-    UcadZmqNode *node = g_new (UcadZmqNode, 1);
+    UcadZmqNode *node = NULL;
     GError *error = NULL;
 
     if (zmq_endpoints == NULL) {
@@ -779,6 +924,11 @@ handle_zmq_add_endpoint_request (GSocketConnection *connection, UcaCamera *camer
 
     if (g_hash_table_lookup (zmq_endpoints, request->endpoint) == NULL) {
         g_debug ("Adding endpoint `%s'", request->endpoint);
+        if (!ucad_zmq_endpoint_is_local (request->endpoint, &error)) {
+            goto send_error_reply;
+        }
+
+        node = g_new (UcadZmqNode, 1);
         if (context == NULL) {
             if ((context = zmq_ctx_new ()) == NULL) {
                 g_set_error (&error, UCAD_ERROR, UCAD_ERROR_ZMQ_CONTEXT_CREATION_FAILED,
